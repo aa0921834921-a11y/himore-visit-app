@@ -116,7 +116,7 @@ export default function Me() {
         left={<Icon name="robot" size={20} color={C.text2} />}
         onPress={() =>
           alertDialog(
-            '哈鏌業務拜訪紀錄 POC',
+            '哈鏌業務管理平台 POC',
             `版本 ${Constants.expoConfig?.version || '0.1.0'}\nAI 服務:${ai.name}\n資料存放:僅這支手機(POC 無伺服器)\n標誌為暫用版本,正式版將換成官方檔案。`,
           )
         }

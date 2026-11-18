@@ -31,7 +31,7 @@ export default function LoginScreen() {
       <View style={{ alignItems: 'center', marginTop: SP.xxl, marginBottom: SP.xxl }}>
         <Image source={BRAND.logo} style={{ width: 220, height: 220 / BRAND.logoRatio }} resizeMode="contain" accessibilityLabel="HI-MORE" />
         <Txt size={T.h2} weight="700" style={{ marginTop: SP.xl }}>
-          登入哈鏌業務拜訪紀錄
+          業務管理平台
         </Txt>
       </View>
 

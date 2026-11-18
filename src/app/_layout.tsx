@@ -1,5 +1,5 @@
 import React, { useEffect } from 'react';
-import { View } from 'react-native';
+import { Platform, View } from 'react-native';
 import { Stack } from 'expo-router';
 import { StatusBar } from 'expo-status-bar';
 import * as SplashScreen from 'expo-splash-screen';
@@ -13,6 +13,16 @@ import { ToastHost } from '../components/ToastHost';
 import { C } from '../theme';
 
 SplashScreen.preventAutoHideAsync().catch(() => {});
+
+// 網頁版:把整頁底色設成深色,切換頁面載入時才不會閃白
+if (Platform.OS === 'web' && typeof document !== 'undefined') {
+  document.documentElement.style.backgroundColor = C.bg;
+  document.body.style.backgroundColor = C.bg;
+  const meta = document.createElement('meta');
+  meta.name = 'theme-color';
+  meta.content = C.bg;
+  document.head.appendChild(meta);
+}
 
 function applyNetwork(st: Network.NetworkState) {
   const wasOnline = isOnline();

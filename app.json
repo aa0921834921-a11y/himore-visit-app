@@ -1,6 +1,6 @@
 {
   "expo": {
-    "name": "哈鏌業務拜訪紀錄",
+    "name": "哈鏌業務管理平台",
     "slug": "himore-visit-poc",
     "scheme": "himorevisit",
     "version": "0.1.0",
@@ -25,7 +25,7 @@
     "web": {
       "favicon": "./assets/favicon.png",
       "output": "single",
-      "name": "哈鏌業務拜訪紀錄"
+      "name": "哈鏌業務管理平台"
     },
     "plugins": [
       "expo-router",

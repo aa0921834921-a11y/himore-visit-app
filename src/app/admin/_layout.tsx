@@ -12,7 +12,7 @@ import { useAppState } from '../../store/store';
 import { currentUser } from '../../store/selectors';
 import { logout } from '../../store/actions';
 
-// 管理後台外框:頁首「業務拜訪紀錄|管理後台」+ 左側選單(F-005 一般 / F-006 選取);手機寬度時選單改為上方橫向捲動
+// 管理後台外框:頁首「業務管理平台|管理後台」+ 左側選單(F-005 一般 / F-006 選取);手機寬度時選單改為上方橫向捲動
 const MENU: { href: string; label: string; icon: IconName }[] = [
   { href: '/admin', label: '首頁總覽', icon: 'home' },
   { href: '/admin/customers', label: '客戶管理', icon: 'customer' },
@@ -45,7 +45,7 @@ export default function AdminLayout() {
       <View style={[styles.header, { paddingTop: insets.top + 8 }]}>
         <Image source={BRAND.logo} style={{ width: 110, height: 110 / BRAND.logoRatio }} resizeMode="contain" />
         <Txt size={wide ? T.h3 : T.body} weight="700" style={{ marginLeft: SP.md, flex: 1 }} numberOfLines={1}>
-          業務拜訪紀錄|管理後台
+          業務管理平台|管理後台
         </Txt>
         {wide ? (
           <Txt size={T.small} color={C.text2} style={{ marginRight: SP.sm }}>

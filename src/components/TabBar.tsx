@@ -4,9 +4,11 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { router } from 'expo-router';
 import { NAV } from '../assets';
 import { C, T } from '../theme';
-import { Txt } from './ui';
+import { Icon, Txt } from './ui';
+import { useAppState } from '../store/store';
+import { currentUser, pendingConfirmVisits } from '../store/selectors';
 
-// 底部導覽(A-05 底板、A-06 未選取、A-07 選取、A-08/A-09 中央記錄按鈕):首頁|客戶|記錄|我的
+// 底部導覽(A-05 底板、A-06 未選取、A-07 選取、A-08/A-09 中央記錄按鈕):首頁|客戶|記錄|待確認|我的(五格,記錄按鈕置中)
 
 type TabBarProps = {
   state: { index: number; routes: { key: string; name: string }[] };
@@ -22,6 +24,9 @@ const TABS: Record<string, { label: string; on: ImageSourcePropType; off: ImageS
 export function TabBar({ state, navigateToTab }: TabBarProps) {
   const insets = useSafeAreaInsets();
   const current = state.routes[state.index]?.name;
+  const s = useAppState();
+  const me = currentUser(s);
+  const pending = me ? pendingConfirmVisits(s, me.id).length : 0;
   const item = (name: string) => {
     const t = TABS[name];
     const route = state.routes.find((r) => r.name === name);
@@ -50,6 +55,21 @@ export function TabBar({ state, navigateToTab }: TabBarProps) {
           </>
         )}
       </Pressable>
+      <Pressable style={styles.item} onPress={() => router.push('/pending')} accessibilityRole="button" accessibilityLabel="待確認">
+        <View>
+          <Icon name="edit" size={26} color={C.text2} style={{ margin: 1 }} />
+          {pending > 0 ? (
+            <View style={styles.badge}>
+              <Txt size={10} weight="700" color={C.white}>
+                {pending}
+              </Txt>
+            </View>
+          ) : null}
+        </View>
+        <Txt size={T.tiny} weight="500" color={C.text2} style={{ marginTop: 2 }}>
+          待確認
+        </Txt>
+      </Pressable>
       {item('me')}
     </View>
   );
@@ -65,5 +85,6 @@ const styles = StyleSheet.create({
     borderTopColor: 'rgba(138,155,162,0.35)',
   },
   item: { flex: 1, alignItems: 'center', justifyContent: 'flex-end' },
-  center: { width: 58, height: 58, marginTop: -26 },
+  center: { width: 54, height: 54, marginTop: -22 },
+  badge: { position: 'absolute', top: -4, right: -8, minWidth: 16, height: 16, borderRadius: 8, backgroundColor: C.red, alignItems: 'center', justifyContent: 'center', paddingHorizontal: 3 },
 });

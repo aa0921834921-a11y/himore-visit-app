@@ -61,8 +61,8 @@ export default function Customers() {
               onPress={() => router.push(`/customer/${c.id}`)}
               right={
                 <View style={{ alignItems: 'flex-end', gap: 4 }}>
-                  <Chip label={type} tone={type === '初次' ? 'teal' : 'orange'} />
-                  {hasAvoid ? <Chip label="避免事項" tone="red" icon="dot" /> : null}
+                  <Chip label={type} tone={type === '初次' ? 'teal' : 'orange'} style={{ alignSelf: 'flex-end' }} />
+                  {hasAvoid ? <Chip label="避免事項" tone="red" icon="dot" style={{ alignSelf: 'flex-end' }} /> : null}
                 </View>
               }
             />

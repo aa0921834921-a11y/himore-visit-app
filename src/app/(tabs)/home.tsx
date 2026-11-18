@@ -86,7 +86,7 @@ export default function Home() {
                   </Txt>
                 </View>
                 <View style={{ alignItems: 'flex-end', gap: 4 }}>
-                  <Chip label={x.visitType} tone={x.visitType === '初次' ? 'teal' : 'orange'} />
+                  <Chip label={x.visitType} tone={x.visitType === '初次' ? 'teal' : 'orange'} style={{ alignSelf: 'flex-end' }} />
                   {status ? (
                     <Txt size={T.tiny} color={status === '已入庫' ? C.teal : C.yellow}>
                       {status}

@@ -1,0 +1,57 @@
+# 推送到 main 分支時,自動把網頁版部署到 GitHub Pages
+# 網址:https://<帳號>.github.io/<專案名稱>/(手機瀏覽器直接開啟,可「加到主畫面」)
+name: 部署網頁版
+
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  pages: write
+  id-token: write
+
+concurrency:
+  group: pages
+  cancel-in-progress: true
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+
+      - name: 安裝套件
+        run: npm ci
+
+      - name: 匯出網頁版
+        run: npx expo export --platform web
+        env:
+          EXPO_BASE_URL: /${{ github.event.repository.name }}
+          EXPO_NO_TELEMETRY: 1
+          CI: 1
+
+      - name: 單頁應用設定(重新整理或直接開啟子頁面時不會 404)
+        run: |
+          cp dist/index.html dist/404.html
+          touch dist/.nojekyll
+
+      - uses: actions/upload-pages-artifact@v3
+        with:
+          path: dist
+
+  deploy:
+    needs: build
+    runs-on: ubuntu-latest
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    steps:
+      - id: deployment
+        uses: actions/deploy-pages@v4

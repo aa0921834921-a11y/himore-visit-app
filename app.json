@@ -1,0 +1,54 @@
+{
+  "expo": {
+    "name": "哈鏌業務拜訪紀錄",
+    "slug": "himore-visit-poc",
+    "scheme": "himorevisit",
+    "version": "0.1.0",
+    "orientation": "portrait",
+    "icon": "./assets/icon.png",
+    "userInterfaceStyle": "dark",
+    "backgroundColor": "#0B1F28",
+    "android": {
+      "package": "com.himore.visitpoc",
+      "adaptiveIcon": {
+        "backgroundColor": "#0B1F28",
+        "foregroundImage": "./assets/android-icon-foreground.png",
+        "backgroundImage": "./assets/android-icon-background.png",
+        "monochromeImage": "./assets/android-icon-monochrome.png"
+      },
+      "predictiveBackGestureEnabled": false,
+      "versionCode": 1,
+      "permissions": [
+        "android.permission.RECORD_AUDIO"
+      ]
+    },
+    "web": {
+      "favicon": "./assets/favicon.png",
+      "output": "single",
+      "name": "哈鏌業務拜訪紀錄"
+    },
+    "plugins": [
+      "expo-router",
+      [
+        "expo-audio",
+        {
+          "microphonePermission": "用於拜訪錄音與業務口述記錄。拒絕後仍可用文字記錄。",
+          "recordAudioAndroid": true,
+          "enableBackgroundRecording": true
+        }
+      ],
+      [
+        "expo-splash-screen",
+        {
+          "image": "./assets/splash-icon.png",
+          "backgroundColor": "#0B1F28",
+          "imageWidth": 240
+        }
+      ]
+    ],
+    "platforms": [
+      "android",
+      "web"
+    ]
+  }
+}

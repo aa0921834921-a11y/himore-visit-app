@@ -1,0 +1,81 @@
+# 打包 Android APK(不需要 Expo 帳號,直接在 GitHub 上編譯)
+# 用法一:GitHub → Actions → 「打包 Android APK」→ Run workflow,完成後在該次執行頁面下方下載 APK
+# 用法二:推送版本標籤(例如 v0.1.0),會自動建立 Release 並附上 APK
+name: 打包 Android APK
+
+on:
+  workflow_dispatch:
+  push:
+    tags: ['v*']
+
+permissions:
+  contents: write
+
+jobs:
+  apk:
+    runs-on: ubuntu-latest
+    env:
+      HAS_KEYSTORE: ${{ secrets.ANDROID_KEYSTORE_BASE64 != '' }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: 17
+
+      - uses: gradle/actions/setup-gradle@v4
+
+      - name: 安裝套件
+        run: npm ci
+
+      - name: 產生 Android 原生專案
+        run: npx expo prebuild --platform android --no-install
+        env:
+          CI: 1
+          EXPO_NO_TELEMETRY: 1
+
+      # 若在 GitHub 專案的 Settings → Secrets 設定了正式簽章(見 README),就用正式簽章;否則使用測試簽章(可安裝,但不能上架)
+      - name: 設定正式簽章(選用)
+        if: env.HAS_KEYSTORE == 'true'
+        env:
+          KEYSTORE_BASE64: ${{ secrets.ANDROID_KEYSTORE_BASE64 }}
+          KEYSTORE_PASSWORD: ${{ secrets.ANDROID_KEYSTORE_PASSWORD }}
+          KEY_ALIAS: ${{ secrets.ANDROID_KEY_ALIAS }}
+          KEY_PASSWORD: ${{ secrets.ANDROID_KEY_PASSWORD }}
+        run: |
+          echo "$KEYSTORE_BASE64" | base64 -d > android/app/release.keystore
+          cat >> android/gradle.properties <<EOF
+          HIMORE_STORE_FILE=release.keystore
+          HIMORE_STORE_PASSWORD=$KEYSTORE_PASSWORD
+          HIMORE_KEY_ALIAS=$KEY_ALIAS
+          HIMORE_KEY_PASSWORD=$KEY_PASSWORD
+          EOF
+          node scripts/use-release-signing.js
+
+      - name: 編譯 APK
+        working-directory: android
+        run: ./gradlew assembleRelease --no-daemon
+
+      - name: 重新命名
+        run: |
+          VERSION=$(node -p "require('./package.json').version")
+          mkdir -p out
+          cp android/app/build/outputs/apk/release/app-release.apk "out/himore-visit-${VERSION}.apk"
+
+      - name: 上傳 APK(在本次執行頁面下方下載)
+        uses: actions/upload-artifact@v4
+        with:
+          name: himore-visit-apk
+          path: out/*.apk
+
+      - name: 建立 Release(推送版本標籤時)
+        if: startsWith(github.ref, 'refs/tags/v')
+        uses: softprops/action-gh-release@v2
+        with:
+          files: out/*.apk

@@ -66,7 +66,7 @@ export async function copyText(text: string) {
 
 /** B4 下載 CSV:欄位依文案表 T-B4-14;「限定」敏感度的偏好與避免事項預設不匯出 */
 export function buildVisitsCsv(s: AppState, visits: Visit[], includeRestricted = false): string {
-  const header = ['拜訪編號', '客戶編號', '客戶名稱', '業務', '日期', '拜訪類型', '輸入來源', '狀態', '題目與回覆', '摘要', '待辦', '偏好與避免事項', '確認時間'];
+  const header = ['拜訪編號', '客戶編號', '客戶名稱', '業務', '日期', '拜訪類型', '輸入來源', '狀態', '題目與回覆', '摘要', '待辦', '偏好與避免事項', '補充內容', '附件', '確認時間'];
   const srcLabel = { recording: '現場錄音', dictation: '業務口述', text: '文字輸入' } as const;
   const rows = visits.map((v) => {
     const c = customerById(s, v.customerId);
@@ -84,7 +84,9 @@ export function buildVisitsCsv(s: AppState, visits: Visit[], includeRestricted =
       .filter((p) => p.sourceVisitId === v.id && (includeRestricted || p.sensitivity === 'normal'))
       .map((p) => `${p.type === 'avoid' ? '避免' : '偏好'}:${p.content}`)
       .join(' / ');
-    return [v.code, c?.code, c?.name, u?.name, fmtDate(v.visitAt), v.visitType, srcLabel[v.source], VISIT_STATUS_LABEL[v.status], qa, summary, todos, prefs, v.confirmedAt ? fmtDateTime(v.confirmedAt) : ''];
+    const sups = (v.raw.supplements || []).map((x) => x.text || '(補充口述錄音)').join(' / ');
+    const atts = (v.raw.attachments || []).map((x) => x.name).join(' / ');
+    return [v.code, c?.code, c?.name, u?.name, fmtDate(v.visitAt), v.visitType, srcLabel[v.source], VISIT_STATUS_LABEL[v.status], qa, summary, todos, prefs, sups, atts, v.confirmedAt ? fmtDateTime(v.confirmedAt) : ''];
   });
   return toCsv([header, ...rows]);
 }

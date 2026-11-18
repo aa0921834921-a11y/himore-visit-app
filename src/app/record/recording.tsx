@@ -8,10 +8,9 @@ import { confirmDialog } from '../../components/Dialog';
 import { C, R, SP, T } from '../../theme';
 import { useAppState } from '../../store/store';
 import { customerById, questionById, setById, visitById } from '../../store/selectors';
-import { discardDraft, markSubmitted, patchRaw } from '../../store/actions';
+import { discardDraft, patchRaw } from '../../store/actions';
 import { useRecorder } from '../../services/recorder';
 import { persistAudio } from '../../services/files';
-import { runPipeline } from '../../services/processing';
 import { fmtClock } from '../../lib/util';
 
 // S04 錄音(T-S04-01、T-S04-09~T-S04-12):標記重點、題庫自評勾選、暫停/停止;錄完才批次轉文字
@@ -33,9 +32,7 @@ export default function Recording() {
     const { uri, durationMs } = await rec.stop();
     const audioUri = uri ? persistAudio(uri, v.id) : undefined;
     patchRaw(v.id, { audioUri, audioDurationMs: durationMs, marks, selfCheckedQuestionIds: checked });
-    markSubmitted(v.id);
-    runPipeline(v.id);
-    router.replace(`/visit/${v.id}/processing`);
+    router.replace(`/visit/${v.id}/supplement`);
   };
 
   const onBack = async () => {

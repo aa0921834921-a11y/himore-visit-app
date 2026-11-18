@@ -1,4 +1,4 @@
-import type { AnalysisResult, Customer, DictationAnswer, InputSource, Question, QuestionSet, Segment } from '../../types';
+import type { AnalysisResult, Attachment, Customer, Supplement, DictationAnswer, InputSource, Question, QuestionSet, Segment } from '../../types';
 
 // AI 服務介面。POC 目前使用模擬版(mock.ts);之後接上正式服務時,只要另外實作這個介面並在 index.ts 切換。
 // - transcribe:語音轉文字(錄音完成後批次轉寫,不做即時轉寫)
@@ -12,6 +12,8 @@ export interface TranscribeInput {
   dictation?: DictationAnswer[];
   questions: Question[];
   marks?: number[];
+  supplements?: Supplement[];
+  attachments?: Attachment[];
 }
 
 export interface AnalyzeInput {

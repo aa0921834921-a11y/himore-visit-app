@@ -8,6 +8,7 @@ import { CustomerPicker, ReasonSheet } from '../../../components/Pickers';
 import { SourceSheet } from '../../../components/SourceSheet';
 import { PrefSheet } from '../../../components/PrefSheet';
 import { Sheet } from '../../../components/Sheet';
+import { AttachmentList } from '../../../components/Attachments';
 import { C, R, SP, T } from '../../../theme';
 import { useAppState } from '../../../store/store';
 import { currentUser, customerById, isHandled, questionById, requiredProgress, salesUsers, setById, userById, visitById } from '../../../store/selectors';
@@ -112,6 +113,22 @@ export default function Confirm() {
         <Txt size={T.tiny + 1} color={C.text3} style={{ marginTop: SP.md }}>
           目前為模擬 AI 的示範整理結果;正式版接上 AI 服務後會依實際內容整理。
         </Txt>
+      ) : null}
+
+      {(v.raw.supplements?.length || v.raw.attachments?.length || editable) ? (
+        <Card style={{ marginTop: SP.md }}>
+          <Row style={{ justifyContent: 'space-between' }}>
+            <Txt weight="700">附件與補充</Txt>
+            {editable ? <Button title="補充資料" variant="secondary" full={false} onPress={() => router.push(`/visit/${v.id}/supplement`)} /> : null}
+          </Row>
+          {(v.raw.supplements || []).map((x) => (
+            <Txt key={x.id} size={T.small} color={C.text2} style={{ marginTop: 4 }}>
+              ・{x.kind === 'text' ? '補充文字' : '補充口述'}:{x.text || '(錄音)'}
+            </Txt>
+          ))}
+          {v.raw.attachments?.length ? <View style={{ marginTop: SP.sm }}><AttachmentList items={v.raw.attachments} /></View> : null}
+          {!v.raw.supplements?.length && !v.raw.attachments?.length ? <Txt size={T.small} color={C.text3} style={{ marginTop: 4 }}>沒有補充內容。可後補口述、文字、照片或檔案,再重新整理。</Txt> : null}
+        </Card>
       ) : null}
 
       {/* 頂部:客戶(AI 建議可改)、時間、來源 */}

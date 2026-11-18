@@ -72,3 +72,18 @@ export function cleanupExpiredAudio() {
     visits: st.visits.map((v) => (ids.has(v.id) ? { ...v, raw: { ...v.raw, audioUri: undefined, audioDeleted: true } } : v)),
   }));
 }
+
+/** 照片、檔案:複製到 App 文件夾(網頁版保留瀏覽器暫存網址,重新整理後無法開啟) */
+export function persistAttachment(uri: string, name: string): string {
+  if (isWeb || !uri) return uri;
+  try {
+    const dir = new Directory(Paths.document, 'attachments');
+    if (!dir.exists) dir.create({ intermediates: true });
+    const safe = name.replace(/[\\/:*?"<>|]/g, '_');
+    const dest = new File(dir, `${Date.now()}_${safe}`);
+    new File(uri).copySync(dest);
+    return dest.uri;
+  } catch {
+    return uri;
+  }
+}

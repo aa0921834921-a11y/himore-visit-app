@@ -28,7 +28,19 @@
       "name": "哈鏌業務管理平台"
     },
     "plugins": [
-      "expo-router",
+      [
+        "expo-router",
+        {
+          "asyncRoutes": false
+        }
+      ],
+      [
+        "expo-image-picker",
+        {
+          "photosPermission": "用於上傳拜訪現場照片、名片與文件。",
+          "cameraPermission": "用於拍攝拜訪現場照片與名片。"
+        }
+      ],
       [
         "expo-audio",
         {

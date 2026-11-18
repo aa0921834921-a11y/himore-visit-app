@@ -37,6 +37,8 @@ export async function runPipeline(visitId: string): Promise<void> {
       dictation: v.raw.dictation,
       questions: s.questions,
       marks: v.raw.marks,
+      supplements: v.raw.supplements,
+      attachments: v.raw.attachments,
     });
     await sleep(v.source === 'text' ? 500 : 1600);
     patchVisit(visitId, (x) => ({ ...x, raw: { ...x.raw, segments } }));

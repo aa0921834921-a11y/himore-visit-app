@@ -4,6 +4,7 @@ import { router, useLocalSearchParams } from 'expo-router';
 import { Header, Screen } from '../../../components/Screen';
 import { Button, Card, Chip, FactChip, KeyValue, Notice, Row, SectionTitle, Segmented, Txt } from '../../../components/ui';
 import { SegmentList } from '../../../components/SourceSheet';
+import { AttachmentList } from '../../../components/Attachments';
 import { C, SP, T } from '../../../theme';
 import { showToast, useAppState } from '../../../store/store';
 import { currentUser, customerById, isHandled, questionById, setById, userById, visitById } from '../../../store/selectors';
@@ -81,6 +82,17 @@ export default function VisitDetail() {
               <Txt color={a.summary[k].text === '未知' ? C.text3 : C.text}>{a.summary[k].text}</Txt>
             </Card>
           ))}
+          {v.raw.supplements?.length || v.raw.attachments?.length ? (
+            <>
+              <SectionTitle title="附件與補充" />
+              {(v.raw.supplements || []).map((x) => (
+                <Txt key={x.id} size={T.small} color={C.text2} style={{ marginBottom: 4 }}>
+                  ・{x.kind === 'text' ? '補充文字' : '補充口述'}:{x.text || '(錄音)'}
+                </Txt>
+              ))}
+              {v.raw.attachments?.length ? <AttachmentList items={v.raw.attachments} /> : null}
+            </>
+          ) : null}
           {todos.length ? (
             <>
               <SectionTitle title="待辦" />

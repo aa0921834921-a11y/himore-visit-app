@@ -8,8 +8,7 @@ import { confirmDialog } from '../../components/Dialog';
 import { C, SP, T } from '../../theme';
 import { showToast, useAppState } from '../../store/store';
 import { customerById, questionById, setById, visitById } from '../../store/selectors';
-import { discardDraft, markSubmitted, patchRaw } from '../../store/actions';
-import { runPipeline } from '../../services/processing';
+import { discardDraft, patchRaw } from '../../store/actions';
 import { DEMO_TEXT } from '../../services/ai';
 
 const LIMIT = 2000;
@@ -45,9 +44,7 @@ export default function TextInputScreen() {
 
   const done = () => {
     patchRaw(v.id, { text: text.trim() });
-    markSubmitted(v.id);
-    runPipeline(v.id);
-    router.replace(`/visit/${v.id}/processing`);
+    router.replace(`/visit/${v.id}/supplement`);
   };
 
   const onBack = async () => {

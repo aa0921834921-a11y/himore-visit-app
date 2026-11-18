@@ -79,7 +79,7 @@ export interface Segment {
   id: string;
   text: string;
   source: InputSource;
-  speaker?: string; // 業務、客戶、語者未確認
+  speaker?: string; // 業務、客戶、語者未確認、業務補充
   start?: number; // 秒,僅錄音
   end?: number;
   questionId?: string; // 逐題口述時對應的題目
@@ -101,6 +101,26 @@ export interface DictationAnswer {
   reason?: string;
 }
 
+export interface Attachment {
+  id: string;
+  kind: 'photo' | 'file';
+  name: string;
+  uri: string;
+  mimeType?: string;
+  size?: number;
+  addedAt: string;
+}
+
+/** 主要記錄方式之外,後補的口述或文字 */
+export interface Supplement {
+  id: string;
+  kind: 'dictation' | 'text';
+  text: string;
+  audioUri?: string;
+  durationMs?: number;
+  addedAt: string;
+}
+
 export interface RawContent {
   text?: string; // 文字輸入或口述自由補充的文字
   audioUri?: string; // 錄音或自由口述的錄音檔
@@ -111,6 +131,8 @@ export interface RawContent {
   dictation?: DictationAnswer[];
   consent?: ConsentRecord;
   segments?: Segment[]; // 轉文字後的逐字稿
+  supplements?: Supplement[]; // 後補口述/文字(可與錄音等主要方式並存)
+  attachments?: Attachment[]; // 照片與檔案
 }
 
 export type AnswerStatus = 'answered' | 'partial' | 'uncovered' | 'not_provided' | 'na';

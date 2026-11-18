@@ -317,6 +317,12 @@ export const mockAi: AiService = {
         segs.push({ id: uid('sg'), source: 'dictation', text: c.text.replace(/^我們/, '客戶') }),
       );
     }
+    // 後補的口述與文字:與主要內容一起整理
+    (input.supplements || []).forEach((sp) => {
+      let text = sp.text.trim();
+      if (!text && sp.audioUri) text = '(模擬轉寫)業務補充口述內容。';
+      if (text) segs.push({ id: uid('sg'), source: sp.kind === 'text' ? 'text' : 'dictation', speaker: '業務補充', text });
+    });
     return segs;
   },
 

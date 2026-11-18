@@ -10,10 +10,9 @@ import { ProgressBar } from '../../components/Ring';
 import { C, SP, T } from '../../theme';
 import { useAppState } from '../../store/store';
 import { customerById, questionById, setById, visitById } from '../../store/selectors';
-import { discardDraft, markSubmitted, patchRaw } from '../../store/actions';
+import { discardDraft, patchRaw } from '../../store/actions';
 import { useRecorder } from '../../services/recorder';
 import { persistAudio } from '../../services/files';
-import { runPipeline } from '../../services/processing';
 import type { DictationAnswer } from '../../types';
 
 // S05 業務口述(T-S05-01~T-S05-12):逐題引導與自由補充可切換;「客戶未提供/不適用」必選原因;全程標示「業務口述」
@@ -74,9 +73,7 @@ export default function Dictate() {
     else if (saved) free = { uri: saved.uri, durationMs: saved.durationMs };
     const dictation = Object.values(all).filter((a) => a.text.trim() || a.audioUri || a.status);
     patchRaw(v.id, { dictation, text: freeText.trim() || undefined, audioUri: free.uri, audioDurationMs: free.durationMs });
-    markSubmitted(v.id);
-    runPipeline(v.id);
-    router.replace(`/visit/${v.id}/processing`);
+    router.replace(`/visit/${v.id}/supplement`);
   };
 
   const hasContent = Object.values(answers).some((a) => a.text.trim() || a.audioUri || a.status) || freeText.trim() || freeAudio.uri || recording;

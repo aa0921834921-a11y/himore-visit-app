@@ -3,6 +3,7 @@ import {
   ActivityIndicator,
   Image,
   ImageStyle,
+  Platform,
   Pressable,
   StyleProp,
   StyleSheet,
@@ -376,7 +377,8 @@ const styles = StyleSheet.create({
   segBadge: { minWidth: 16, height: 16, borderRadius: 8, backgroundColor: C.red, marginLeft: 4, alignItems: 'center', justifyContent: 'center', paddingHorizontal: 3 },
   field: { flexDirection: 'row', alignItems: 'center', backgroundColor: 'rgba(5,20,27,0.92)', borderWidth: 1, borderRadius: R.pill, minHeight: 48, paddingHorizontal: 6 },
   fieldMulti: { borderRadius: R.lg, alignItems: 'stretch' },
-  input: { flex: 1, color: C.text, fontSize: T.body, paddingHorizontal: 12, paddingVertical: 10, minHeight: 46 },
+  // 網頁版:去掉瀏覽器預設的藍色焦點方框;字級 16 以上,iPhone 點輸入框時才不會自動放大畫面
+  input: { flex: 1, color: C.text, fontSize: 16, paddingHorizontal: 12, paddingVertical: 10, minHeight: 46, ...(Platform.OS === 'web' ? ({ outlineStyle: 'none', outlineWidth: 0 } as object) : {}) },
   checkRow: { flexDirection: 'row', alignItems: 'center', paddingVertical: 8 },
   sectionTitle: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', marginTop: SP.xl, marginBottom: SP.md },
   listRow: { flexDirection: 'row', alignItems: 'center', backgroundColor: 'rgba(9,33,43,0.94)', borderColor: C.line, borderWidth: 1, borderRadius: R.md, paddingHorizontal: SP.lg, paddingVertical: SP.md, marginBottom: SP.sm },

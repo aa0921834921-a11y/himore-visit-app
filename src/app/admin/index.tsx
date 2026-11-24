@@ -5,7 +5,7 @@ import { AdminTable, PageTitle, Panel, StatCard } from '../../components/admin';
 import { Chip, Notice, Txt } from '../../components/ui';
 import { C, SP, T } from '../../theme';
 import { useAppState } from '../../store/store';
-import { customerById, setById, userById } from '../../store/selectors';
+import { customerById, setById, userById, visitsToReview } from '../../store/selectors';
 import { coverage, visitsInDays } from '../../store/metrics';
 import { VISIT_STATUS_LABEL } from '../../services/export';
 import { fmtDateTime, pct, ymd } from '../../lib/util';
@@ -23,6 +23,7 @@ export default function AdminHome() {
   const sales = s.users.filter((u) => u.role === 'sales' && u.active).length;
   const admins = s.users.filter((u) => u.role === 'admin' && u.active).length;
   const todays = s.schedules.filter((x) => x.date === today).sort((a, b) => a.time.localeCompare(b.time));
+  const toReview = visitsToReview(s);
   const recent = [...s.visits].filter((v) => v.status !== 'draft').sort((a, b) => b.updatedAt.localeCompare(a.updatedAt)).slice(0, 6);
 
   return (
@@ -37,6 +38,33 @@ export default function AdminHome() {
         <StatCard label="回答覆蓋率(近 30 天)" value={pct(cov.answered, cov.total)} sub={`流程已處理率 ${pct(cov.handled, cov.total)}`} />
         <StatCard label="帳號" value={`${sales + admins} 人`} sub={`業務 ${sales}+管理者 ${admins}`} tone="orange" />
       </View>
+
+      <Panel title={`待主管審閱(${toReview.length})`}>
+        <Txt size={T.small} color={C.text2} style={{ marginBottom: SP.sm }}>
+          業務確認入庫後,在這裡看報告、寫審閱意見,並依結果設計下一次訪談的題目。
+        </Txt>
+        <AdminTable
+          rows={toReview.slice(0, 6)}
+          keyOf={(r) => r.id}
+          onRowPress={(r) => router.push(`/admin/review/${r.id}`)}
+          empty="目前沒有待審閱的拜訪"
+          cols={[
+            { key: 'code', title: '拜訪編號', width: 130, render: (r) => r.code },
+            { key: 'c', title: '客戶', render: (r) => customerById(s, r.customerId)?.name || '未指定' },
+            { key: 'u', title: '業務', width: 90, render: (r) => userById(s, r.salesId)?.name || '—' },
+            { key: 't', title: '類型', width: 70, render: (r) => r.visitType },
+            {
+              key: 'm',
+              title: '未蒐集',
+              width: 80,
+              render: (r) => {
+                const n = (r.ai?.answers || []).filter((x) => x.status === 'uncovered').length;
+                return <Txt size={T.small} weight="700" color={n ? '#FF6B66' : C.teal}>{n ? `${n} 題` : '齊全'}</Txt>;
+              },
+            },
+          ]}
+        />
+      </Panel>
 
       <Panel title={`今日行程(${todays.length})`}>
         <AdminTable
@@ -58,7 +86,7 @@ export default function AdminHome() {
         <AdminTable
           rows={recent}
           keyOf={(r) => r.id}
-          onRowPress={(r) => router.push(`/visit/${r.id}`)}
+          onRowPress={(r) => router.push(`/admin/review/${r.id}`)}
           cols={[
             { key: 'code', title: '拜訪編號', width: 130, render: (r) => r.code },
             { key: 'c', title: '客戶', render: (r) => customerById(s, r.customerId)?.name || '未指定' },

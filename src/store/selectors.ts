@@ -85,3 +85,28 @@ export function knownAndPending(s: AppState, customerId: string, questionSetId?:
 export function salesUsers(s: AppState) {
   return s.users.filter((u) => u.role === 'sales');
 }
+
+/** 初次拜訪預設套用的共用模板 */
+export function defaultFirstSet(s: AppState): QuestionSet | undefined {
+  const active = s.questionSets.filter((x) => x.active && (x.scope || 'template') === 'template');
+  return active.find((x) => x.defaultFirstVisit) || active[0];
+}
+
+/** 安排拜訪時可選的題組:共用模板+該客戶專屬題組 */
+export function setsForCustomer(s: AppState, customerId?: string): QuestionSet[] {
+  return s.questionSets.filter((x) => x.active && ((x.scope || 'template') === 'template' || (customerId && x.customerId === customerId)));
+}
+
+/** 依拜訪類型建議題組:初次→預設初訪模板;複訪→該客戶最新的專屬題組 */
+export function suggestedSetId(s: AppState, customerId: string | undefined, visitType: VisitType): string | undefined {
+  if (visitType === '複訪' && customerId) {
+    const own = s.questionSets.filter((x) => x.active && x.scope === 'customer' && x.customerId === customerId);
+    if (own.length) return own[own.length - 1].id;
+  }
+  return defaultFirstSet(s)?.id;
+}
+
+/** 已入庫、主管尚未審閱的拜訪 */
+export function visitsToReview(s: AppState): Visit[] {
+  return s.visits.filter((v) => v.status === 'confirmed' && !v.review?.comment && !v.review?.nextSetId).sort((a, b) => b.visitAt.localeCompare(a.visitAt));
+}

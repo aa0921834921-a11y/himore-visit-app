@@ -29,6 +29,7 @@ export const DEFAULT_SETTINGS: Settings = {
   simulateFailureNext: false,
   notifyEnabled: true,
   uploadOnWifiOnly: false,
+  integration: { enabled: false, kind: 'webhook', name: 'ERP / CRM(待決定)', url: '', authHeader: '', trigger: 'on_review' },
 };
 
 function iso(d: Date, hh: number, mm: number): string {
@@ -93,23 +94,26 @@ export function buildSeed(): AppState {
     ['Q8', '預算範圍?', '時程與預算'],
     ['Q9', '其他補充事項', '其他'],
     ['Q10', '決策流程與主要窗口?', '基本資訊'],
+    ['Q11', '現有設備的保養維修方式?', '設備現況'],
+    ['Q12', '工廠自動化程度與人力配置?', '設備現況'],
   ];
   const questions: Question[] = qs.map(([code, text, category]) => ({ id: `q_${code.toLowerCase()}`, code, text, category, active: true }));
   const q = (code: string) => `q_${code.toLowerCase()}`;
 
   const questionSets: QuestionSet[] = [
     {
-      id: 'qs_track', name: '射出成型設備追蹤', active: true,
+      id: 'qs_track', name: '射出成型設備追蹤', active: true, scope: 'template',
       items: ['Q1', 'Q2', 'Q3', 'Q4', 'Q5', 'Q6', 'Q7', 'Q8'].map((c) => ({ questionId: q(c), required: true }))
         .concat(['Q9', 'Q10'].map((c) => ({ questionId: q(c), required: false }))),
     },
     {
-      id: 'qs_new', name: '新客戶需求探索', active: true,
-      items: ['Q1', 'Q2', 'Q3'].map((c) => ({ questionId: q(c), required: true }))
-        .concat(['Q6', 'Q10', 'Q9'].map((c) => ({ questionId: q(c), required: false }))),
+      id: 'qs_new', name: '初訪標準模板(新客戶需求探索)', active: true, scope: 'template', defaultFirstVisit: true,
+      note: '第一次拜訪:先了解設備現況、產能痛點與決策流程,不急著報價。',
+      items: ['Q1', 'Q2', 'Q3', 'Q11'].map((c) => ({ questionId: q(c), required: true }))
+        .concat(['Q6', 'Q10', 'Q12', 'Q9'].map((c) => ({ questionId: q(c), required: false }))),
     },
     {
-      id: 'qs_expand', name: '設備擴充需求', active: true,
+      id: 'qs_expand', name: '設備擴充需求', active: true, scope: 'template',
       items: ['Q1', 'Q2', 'Q4', 'Q5', 'Q8'].map((c) => ({ questionId: q(c), required: true }))
         .concat(['Q9'].map((c) => ({ questionId: q(c), required: false }))),
     },

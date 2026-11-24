@@ -96,13 +96,29 @@ export default function AdminVisits() {
       <AdminTable
         rows={list.slice((page - 1) * PAGE, page * PAGE)}
         keyOf={(r) => r.id}
-        onRowPress={(r) => router.push(`/visit/${r.id}`)}
+        onRowPress={(r) => router.push(`/admin/review/${r.id}`)}
         cols={[
           { key: 'code', title: '拜訪編號', width: 130, render: (r) => r.code },
           { key: 'c', title: '客戶', render: (r) => customerById(s, r.customerId)?.name || '未指定' },
           { key: 'u', title: '業務', width: 90, render: (r) => userById(s, r.salesId)?.name || '—' },
           { key: 'd', title: '日期', width: 80, render: (r) => fmtShortDate(r.visitAt) },
           { key: 's', title: '狀態', width: 110, render: (r) => <Chip label={VISIT_STATUS_LABEL[r.status]} tone={r.status === 'confirmed' ? 'teal' : r.status === 'failed' ? 'red' : 'yellow'} /> },
+          {
+            key: 'm',
+            title: '未蒐集',
+            width: 80,
+            render: (r) => {
+              const n = (r.ai?.answers || []).filter((x) => x.status === 'uncovered').length;
+              return r.ai ? <Txt size={T.small} weight="700" color={n ? '#FF6B66' : C.teal}>{n ? `${n} 題` : '齊全'}</Txt> : '—';
+            },
+          },
+          {
+            key: 'r',
+            title: '主管審閱',
+            width: 110,
+            render: (r) =>
+              r.status !== 'confirmed' ? '—' : r.review?.nextSetId ? <Chip label="已排下次題組" tone="teal" /> : r.review?.comment ? <Chip label="已審閱" tone="teal" /> : <Chip label="待審閱" tone="orange" />,
+          },
         ]}
       />
       <Txt size={T.small} color={C.text2} style={{ marginTop: SP.sm }}>
@@ -115,7 +131,7 @@ export default function AdminVisits() {
           CSV 欄位:拜訪編號、客戶編號、業務、日期、拜訪類型、題目與回覆、摘要、待辦、確認時間(另附客戶名稱、輸入來源、狀態、偏好與避免事項)。檔案為 UTF-8,可直接用 Excel 開啟。
         </Txt>
         <Checkbox checked={restricted} onPress={() => setRestricted(!restricted)} label="包含「限定」敏感度的偏好與避免事項" sub="標為「限定」敏感度的偏好與避免事項,預設不匯出" />
-        <Notice tone="gray" icon="sync" text="ERP 自動拋送(串接方式尚待決定)" />
+        <Notice tone="gray" icon="sync" text="對外串接(Webhook / API):請到「系統設定 → 對外串接」設定;目前為預留,只排入佇列不實際送出。" />
       </Panel>
 
       <CustomerPicker

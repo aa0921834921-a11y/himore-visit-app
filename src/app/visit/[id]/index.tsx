@@ -5,6 +5,8 @@ import { Header, Screen } from '../../../components/Screen';
 import { Button, Card, Chip, FactChip, KeyValue, Notice, Row, SectionTitle, Segmented, Txt } from '../../../components/ui';
 import { SegmentList } from '../../../components/SourceSheet';
 import { AttachmentList } from '../../../components/Attachments';
+import { OutOfScope } from '../../../components/Report';
+import { buildVisitReport } from '../../../services/report';
 import { C, SP, T } from '../../../theme';
 import { showToast, useAppState } from '../../../store/store';
 import { currentUser, customerById, isHandled, questionById, setById, userById, visitById } from '../../../store/selectors';
@@ -50,6 +52,20 @@ export default function VisitDetail() {
         </Row>
       </Card>
 
+      {v.review?.comment || v.review?.nextSetId ? (
+        <Card tone="accent" style={{ marginTop: SP.md }}>
+          <Txt size={T.small} weight="700" color={C.teal}>
+            主管審閱({userById(s, v.review.by)?.name || '管理者'}・{fmtShortDate(v.review.at)})
+          </Txt>
+          {v.review.comment ? <Txt style={{ marginTop: 4 }}>{v.review.comment}</Txt> : null}
+          {v.review.nextSetId ? (
+            <Txt size={T.small} color={C.text2} style={{ marginTop: 4 }}>
+              下次訪談題組:{setById(s, v.review.nextSetId)?.name}
+            </Txt>
+          ) : null}
+        </Card>
+      ) : null}
+
       {v.status === 'pending_confirm' && me?.id === v.salesId ? (
         <Button title="前往確認" style={{ marginTop: SP.md }} onPress={() => router.push(`/visit/${v.id}/confirm`)} />
       ) : null}
@@ -82,6 +98,10 @@ export default function VisitDetail() {
               <Txt color={a.summary[k].text === '未知' ? C.text3 : C.text}>{a.summary[k].text}</Txt>
             </Card>
           ))}
+          <SectionTitle title="題庫之外的內容" />
+          <Card style={{ marginBottom: SP.sm }}>
+            <OutOfScope r={buildVisitReport(s, v)} compact />
+          </Card>
           {v.raw.supplements?.length || v.raw.attachments?.length ? (
             <>
               <SectionTitle title="附件與補充" />

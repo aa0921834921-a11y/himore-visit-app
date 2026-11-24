@@ -5,7 +5,7 @@ import { Header, Screen } from '../../../components/Screen';
 import { Button, Card, Chip, FactChip, Icon, KeyValue, Notice, Row, Txt } from '../../../components/ui';
 import { C, SP, T } from '../../../theme';
 import { useAppState } from '../../../store/store';
-import { avoidItems, customerById, knownAndPending, lastConfirmedVisit, openTodosOfCustomer, questionById, scheduleById, setById, userById } from '../../../store/selectors';
+import { avoidItems, customerById, knownAndPending, lastConfirmedVisit, openTodosOfCustomer, questionById, scheduleById, setById, suggestedSetId, userById } from '../../../store/selectors';
 import { audit } from '../../../store/actions';
 import { fmtDate } from '../../../lib/util';
 
@@ -25,7 +25,7 @@ export default function Briefing() {
   if (!c) return null;
   const last = lastConfirmedVisit(s, c.id);
   const first = !last;
-  const set = setById(s, sch?.questionSetId) || setById(s, last?.questionSetId) || s.questionSets[0];
+  const set = setById(s, sch?.questionSetId) || setById(s, suggestedSetId(s, c.id, first ? '初次' : '複訪')) || setById(s, last?.questionSetId) || s.questionSets[0];
   const avoid = avoidItems(s, c.id);
   const todos = openTodosOfCustomer(s, c.id);
   const kp = knownAndPending(s, c.id, set?.id);
@@ -65,6 +65,26 @@ export default function Briefing() {
           </Txt>
         )}
       </Card>
+
+      {last?.review?.comment || set?.note ? (
+        <Card tone="accent" style={{ marginBottom: SP.md }}>
+          <Txt size={T.small} weight="700" color={C.teal} style={{ marginBottom: 4 }}>
+            主管提醒
+          </Txt>
+          {set?.note ? <Txt>{set.note}</Txt> : null}
+          {last?.review?.comment ? (
+            <Txt size={T.small} color={C.text2} style={{ marginTop: 4 }}>
+              上次審閱意見:{last.review.comment}
+            </Txt>
+          ) : null}
+          {set ? (
+            <Txt size={T.tiny + 1} color={C.text3} style={{ marginTop: 4 }}>
+              本次題組:{set.scope === 'customer' ? '專屬・' : ''}
+              {set.name}
+            </Txt>
+          ) : null}
+        </Card>
+      ) : null}
 
       {avoid.length ? (
         <Card tone="danger" style={{ marginBottom: SP.md }}>

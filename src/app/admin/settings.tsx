@@ -9,6 +9,7 @@ import { resetDemoData, showToast, useAppState } from '../../store/store';
 import { userById } from '../../store/selectors';
 import { updateSettings } from '../../store/actions';
 import { ai } from '../../services/ai';
+import { IntegrationPanel } from '../../components/IntegrationPanel';
 import { fmtDateTime } from '../../lib/util';
 import type { AuditType } from '../../types';
 
@@ -154,6 +155,8 @@ export default function AdminSettings() {
           </>,
         )}
       </View>
+
+      <IntegrationPanel />
 
       <Panel title="稽核紀錄">
         <Row style={{ flexWrap: 'wrap', marginBottom: SP.md }}>

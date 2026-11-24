@@ -6,8 +6,8 @@ import { Sheet } from '../../components/Sheet';
 import { confirmDialog, promptDialog } from '../../components/Dialog';
 import { C, R, SP, T } from '../../theme';
 import { useAppState } from '../../store/store';
-import { questionById } from '../../store/selectors';
-import { upsertQuestion, upsertQuestionSet } from '../../store/actions';
+import { customerById, questionById } from '../../store/selectors';
+import { setDefaultFirstVisit, upsertQuestion, upsertQuestionSet } from '../../store/actions';
 import type { Question } from '../../types';
 
 // B2 題庫與題組(T-B2-04~T-B2-16):新增、編輯、停用題目;設定必答或選答;題目分類最多一層
@@ -60,22 +60,43 @@ export default function AdminQuestions() {
       title="題組"
       right={
         <Button
-          title="+新增題組"
+          title="+新增共用模板"
           small
           full={false}
           variant="secondary"
           onPress={async () => {
             const name = await promptDialog({ title: '新增題組', placeholder: '例:射出成型設備追蹤' });
-            if (name?.trim()) upsertQuestionSet({ name: name.trim(), items: [] });
+            if (name?.trim()) upsertQuestionSet({ name: name.trim(), items: [], scope: 'template' });
           }}
         />
       }
       style={wide ? { flex: 1 } : undefined}
     >
+      <Txt size={T.small} weight="700" color={C.text2} style={{ marginBottom: 6 }}>
+        共用模板(可套用到任何客戶)
+      </Txt>
       <Row style={{ flexWrap: 'wrap', marginBottom: SP.md }}>
-        {s.questionSets.map((x) => (
-          <Chip key={x.id} label={x.name} tone={x.id === setId ? 'orange' : 'gray'} onPress={() => setSetId(x.id)} style={{ height: 30, paddingHorizontal: 12 }} />
-        ))}
+        {s.questionSets
+          .filter((x) => (x.scope || 'template') === 'template')
+          .map((x) => (
+            <Chip key={x.id} label={`${x.defaultFirstVisit ? '★ ' : ''}${x.name}`} tone={x.id === setId ? 'orange' : 'gray'} onPress={() => setSetId(x.id)} style={{ height: 30, paddingHorizontal: 12 }} />
+          ))}
+      </Row>
+      <Txt size={T.small} weight="700" color={C.text2} style={{ marginBottom: 6 }}>
+        客戶專屬(主管依前次拜訪設計)
+      </Txt>
+      <Row style={{ flexWrap: 'wrap', marginBottom: SP.md }}>
+        {s.questionSets.filter((x) => x.scope === 'customer').length === 0 ? (
+          <Txt size={T.small} color={C.text3}>
+            尚無。到「拜訪紀錄與匯出」打開一筆拜訪,按「設計第二次訪談問題」建立。
+          </Txt>
+        ) : (
+          s.questionSets
+            .filter((x) => x.scope === 'customer')
+            .map((x) => (
+              <Chip key={x.id} label={x.name} tone={x.id === setId ? 'orange' : 'teal'} onPress={() => setSetId(x.id)} style={{ height: 30, paddingHorizontal: 12 }} />
+            ))
+        )}
       </Row>
       {set ? (
         <>
@@ -94,6 +115,24 @@ export default function AdminQuestions() {
               </Txt>
               <Toggle value={set.active} onChange={(v) => upsertQuestionSet({ ...set, active: v })} />
             </Row>
+          </Row>
+          <Row style={{ flexWrap: 'wrap', marginBottom: SP.sm }}>
+            {set.scope === 'customer' ? (
+              <Chip label={`客戶專屬:${customerById(s, set.customerId)?.name || '—'}`} tone="teal" icon="customer" />
+            ) : set.defaultFirstVisit ? (
+              <Chip label="★ 初次拜訪預設模板" tone="orange" />
+            ) : (
+              <Chip label="設為初次拜訪預設模板" tone="gray" icon="star" onPress={() => setDefaultFirstVisit(set.id)} />
+            )}
+            <Chip
+              label={set.note ? `訪談重點:${set.note}` : '+訪談重點'}
+              tone="gray"
+              icon="edit"
+              onPress={async () => {
+                const t = await promptDialog({ title: '給業務的訪談重點', initial: set.note, multiline: true, placeholder: '例:第一次拜訪先了解設備現況,不急著報價' });
+                if (t !== null) upsertQuestionSet({ ...set, note: t.trim() || undefined });
+              }}
+            />
           </Row>
           {set.items.map((it, i) => {
             const q = questionById(s, it.questionId);

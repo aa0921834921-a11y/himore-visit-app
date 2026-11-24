@@ -32,7 +32,8 @@ export default function AdminLayout() {
   if (!me) return <Redirect href="/login" />;
   if (me.role !== 'admin') return <Redirect href="/home" />;
 
-  const active = (href: string) => (href === '/admin' ? path === '/admin' || path === '/admin/' : path.startsWith(href));
+  const active = (href: string) =>
+    href === '/admin' ? path === '/admin' || path === '/admin/' : path.startsWith(href) || (href === '/admin/visits' && (path.startsWith('/admin/review') || path.startsWith('/admin/followup')));
   const doLogout = async () => {
     if (await confirmDialog({ title: '登出管理後台?', ok: '登出' })) {
       logout();

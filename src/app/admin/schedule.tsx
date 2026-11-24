@@ -7,7 +7,7 @@ import { CustomerPicker } from '../../components/Pickers';
 import { confirmDialog } from '../../components/Dialog';
 import { C, R, SP, T } from '../../theme';
 import { useAppState } from '../../store/store';
-import { customerById, customerVisitType, salesUsers, setById, userById } from '../../store/selectors';
+import { customerById, customerVisitType, defaultFirstSet, salesUsers, setById, setsForCustomer, suggestedSetId, userById } from '../../store/selectors';
 import { deleteSchedule, upsertSchedule } from '../../store/actions';
 import { addDays, fmtDate, parseYmd, weekday, ymd } from '../../lib/util';
 import type { Schedule, VisitType } from '../../types';
@@ -45,7 +45,7 @@ export default function AdminSchedule() {
 
   const openForm = (x: Schedule | 'new') => {
     setOpen(x);
-    if (x === 'new') setF({ date: ymd(), time: '10:00', salesId: salesUsers(s)[0]?.id || '', customerId: '', visitType: '初次', questionSetId: s.questionSets[0]?.id || '', note: '' });
+    if (x === 'new') setF({ date: ymd(), time: '10:00', salesId: salesUsers(s)[0]?.id || '', customerId: '', visitType: '初次', questionSetId: defaultFirstSet(s)?.id || '', note: '' });
     else setF({ date: x.date, time: x.time, salesId: x.salesId, customerId: x.customerId, visitType: x.visitType, questionSetId: x.questionSetId, note: x.note || '' });
   };
 
@@ -194,7 +194,7 @@ export default function AdminSchedule() {
         </Txt>
         <Segmented
           value={f.visitType}
-          onChange={(v) => setF({ ...f, visitType: v })}
+          onChange={(v) => setF({ ...f, visitType: v, questionSetId: suggestedSetId(s, f.customerId, v) || f.questionSetId })}
           options={[
             { value: '初次', label: '初次' },
             { value: '複訪', label: '複訪' },
@@ -205,8 +205,8 @@ export default function AdminSchedule() {
           題組
         </Txt>
         <Row style={{ flexWrap: 'wrap', marginBottom: SP.md }}>
-          {s.questionSets.filter((x) => x.active).map((x) => (
-            <Chip key={x.id} label={x.name} tone={f.questionSetId === x.id ? 'orange' : 'gray'} onPress={() => setF({ ...f, questionSetId: x.id })} style={{ height: 32, paddingHorizontal: 12 }} />
+          {setsForCustomer(s, f.customerId).map((x) => (
+            <Chip key={x.id} label={`${x.scope === 'customer' ? '專屬・' : x.defaultFirstVisit ? '★ ' : ''}${x.name}`} tone={f.questionSetId === x.id ? 'orange' : x.scope === 'customer' ? 'teal' : 'gray'} onPress={() => setF({ ...f, questionSetId: x.id })} style={{ height: 32, paddingHorizontal: 12 }} />
           ))}
         </Row>
         <Field label="備註" value={f.note} onChangeText={(t) => setF({ ...f, note: t })} placeholder="例:確認 8 台交期" />
@@ -216,7 +216,10 @@ export default function AdminSchedule() {
         selectedId={f.customerId}
         onClose={() => setPickCustomer(false)}
         onPick={(c) => {
-          setF({ ...f, customerId: c.id, visitType: customerVisitType(s, c.id), salesId: c.ownerId || f.salesId });
+          {
+            const vt = customerVisitType(s, c.id);
+            setF({ ...f, customerId: c.id, visitType: vt, salesId: c.ownerId || f.salesId, questionSetId: suggestedSetId(s, c.id, vt) || f.questionSetId });
+          }
           setPickCustomer(false);
         }}
       />

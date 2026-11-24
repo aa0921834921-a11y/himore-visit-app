@@ -157,11 +157,11 @@ export default function StartRecord() {
       />
       <Sheet visible={pickSet} onClose={() => setPickSet(false)} title="選擇題組">
         {s.questionSets
-          .filter((x) => x.active)
+          .filter((x) => x.active && ((x.scope || 'template') === 'template' || x.customerId === customerId))
           .map((x) => (
             <ListRow
               key={x.id}
-              title={x.name}
+              title={`${x.scope === 'customer' ? '專屬・' : ''}${x.name}`}
               sub={`共 ${x.items.length} 題・必答 ${x.items.filter((i) => i.required).length} 題`}
               onPress={() => {
                 setQuestionSetId(x.id);

@@ -53,6 +53,13 @@ export interface QuestionSet {
   name: string;
   items: QuestionSetItem[];
   active: boolean;
+  /** template:共用模板(可套用到任何客戶);customer:某客戶專屬(例如主管依初訪結果設計的第二次訪談) */
+  scope?: 'template' | 'customer';
+  customerId?: string;
+  /** 初次拜訪預設套用的共用模板(只會有一個) */
+  defaultFirstVisit?: boolean;
+  fromVisitId?: string; // 依哪一次拜訪設計
+  note?: string; // 給業務的訪談重點
 }
 
 export type VisitType = '初次' | '複訪';
@@ -190,6 +197,16 @@ export interface TodoSuggestion {
   keep: boolean;
 }
 
+/** 題庫之外談到的內容,分類彙整到報告 */
+export type InsightKind = 'reminder' | 'avoid' | 'opportunity' | 'other';
+
+export interface Insight {
+  id: string;
+  kind: InsightKind;
+  text: string;
+  sourceSegmentId?: string;
+}
+
 export interface AnalysisResult {
   mock: boolean;
   suggestedCustomerId?: string;
@@ -199,7 +216,17 @@ export interface AnalysisResult {
   uncertainties: Uncertainty[];
   prefs: PrefSuggestion[];
   todos: TodoSuggestion[];
+  insights?: Insight[];
   generatedAt: string;
+}
+
+/** 主管審閱 */
+export interface VisitReview {
+  by: string;
+  at: string;
+  comment: string;
+  nextSetId?: string; // 依這次拜訪設計的下次訪談題組
+  nextScheduleId?: string;
 }
 
 export interface Visit {
@@ -219,6 +246,7 @@ export interface Visit {
   raw: RawContent;
   ai?: AnalysisResult; // AI 草稿,確認前不得出現在客戶檔案
   editCount: number;
+  review?: VisitReview;
   confirmedAt?: string;
   confirmedBy?: string;
   createdAt: string;
@@ -272,6 +300,27 @@ export interface Settings {
   simulateFailureNext: boolean; // 示範用:下一筆處理失敗
   notifyEnabled: boolean;
   uploadOnWifiOnly: boolean;
+  integration?: IntegrationSettings;
+}
+
+/** 對外串接(預留):Webhook 或 API。POC 只產生標準格式的資料並排入佇列,不實際送出 */
+export interface IntegrationSettings {
+  enabled: boolean;
+  kind: 'webhook' | 'api';
+  name: string; // 目標平台名稱,例:ERP、CRM、Teams
+  url: string;
+  authHeader: string;
+  trigger: 'manual' | 'on_confirm' | 'on_review';
+}
+
+export interface OutboxItem {
+  id: string;
+  visitId: string;
+  target: string;
+  event: 'visit.confirmed' | 'visit.reviewed' | 'visit.manual';
+  status: 'held' | 'sent' | 'failed'; // held:串接未啟用,先保留
+  payload: string; // JSON
+  createdAt: string;
 }
 
 export interface AppState {
@@ -287,6 +336,7 @@ export interface AppState {
   preferences: Preference[];
   todos: Todo[];
   audit: AuditEvent[];
+  outbox?: OutboxItem[];
   settings: Settings;
   lastSyncAt?: string;
 }

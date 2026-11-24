@@ -9,6 +9,8 @@ import { SourceSheet } from '../../../components/SourceSheet';
 import { PrefSheet } from '../../../components/PrefSheet';
 import { Sheet } from '../../../components/Sheet';
 import { AttachmentList } from '../../../components/Attachments';
+import { OutOfScope } from '../../../components/Report';
+import { buildVisitReport } from '../../../services/report';
 import { C, R, SP, T } from '../../../theme';
 import { useAppState } from '../../../store/store';
 import { currentUser, customerById, isHandled, questionById, requiredProgress, salesUsers, setById, userById, visitById } from '../../../store/selectors';
@@ -180,6 +182,14 @@ export default function Confirm() {
               )}
             </View>
           </Row>
+          {editable && a.answers.some((x) => x.status === 'uncovered') ? (
+            <View style={{ marginTop: SP.md }}>
+              <Txt size={T.tiny + 1} color={C.text3} style={{ marginBottom: SP.xs }}>
+                紅色題目是內容中沒有提到的。可補錄口述、打字或上傳照片/檔案,AI 會重新比對。
+              </Txt>
+              <Button title={`補充資料(${a.answers.filter((x) => x.status === 'uncovered').length} 題未蒐集)`} variant="secondary" small icon="attach" onPress={() => router.push(`/visit/${v.id}/supplement`)} />
+            </View>
+          ) : null}
         </Card>
       ) : null}
 
@@ -214,6 +224,12 @@ export default function Confirm() {
               <Notice tone="red" icon="warn" text={`AI 不確定:${u.text}`} />
             </Pressable>
           ))}
+          <Card style={{ marginBottom: SP.md }}>
+            <Txt size={T.small} weight="700" color={C.teal} style={{ marginBottom: 4 }}>
+              題庫之外的內容
+            </Txt>
+            <OutOfScope r={buildVisitReport(s, v)} />
+          </Card>
           {SUMMARY.map(({ key, title }) => {
             const f = a.summary[key];
             const unknown = f.text === '未知';
@@ -482,7 +498,7 @@ function AnswerRow({ item, onPress }: { item: AnswerItem; onPress: () => void })
   const s = useAppState();
   const q = questionById(s, item.questionId);
   const handled = isHandled(item);
-  const red = item.required && !handled;
+  const red = (item.required && !handled) || item.status === 'uncovered';
   return (
     <Pressable onPress={onPress} style={({ pressed }) => [styles.answer, red && styles.answerRed, pressed && { opacity: 0.8 }]}>
       <Row style={{ justifyContent: 'space-between', marginBottom: 4 }}>

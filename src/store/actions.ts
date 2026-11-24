@@ -4,6 +4,7 @@ import type {
   Contact,
   Customer,
   InputSource,
+  OutboxItem,
   Question,
   QuestionSet,
   RawContent,
@@ -16,6 +17,7 @@ import type {
 import { pad, uid } from '../lib/util';
 import { getState, setState } from './store';
 import { customerVisitType, scheduleById } from './selectors';
+import { buildVisitReport } from '../services/report';
 
 const nowIso = () => new Date().toISOString();
 
@@ -148,6 +150,7 @@ export function confirmVisit(visitId: string) {
     ],
   }));
   audit('confirm', `確認入庫 ${v.code}`, { visitId, customerId: v.customerId });
+  if (getState().settings.integration?.trigger === 'on_confirm') enqueueOutbox(visitId, 'visit.confirmed');
 }
 
 // ---------- 客戶 ----------
@@ -245,9 +248,81 @@ export function upsertQuestionSet(set: Partial<QuestionSet> & { name: string }) 
     if (set.id && s.questionSets.some((x) => x.id === set.id)) {
       return { ...s, questionSets: s.questionSets.map((x) => (x.id === set.id ? { ...x, ...set } as QuestionSet : x)) };
     }
-    const ns: QuestionSet = { id: uid('qs'), name: set.name, items: set.items || [], active: true };
+    const ns: QuestionSet = { scope: 'template', ...set, id: set.id || uid('qs'), name: set.name, items: set.items || [], active: true };
     return { ...s, questionSets: [...s.questionSets, ns] };
   });
+}
+
+/** 設定初次拜訪預設套用的共用模板(只會有一個) */
+export function setDefaultFirstVisit(setId: string) {
+  setState((s) => ({ ...s, questionSets: s.questionSets.map((x) => ({ ...x, defaultFirstVisit: x.id === setId })) }));
+}
+
+/** 主管審閱:寫下審閱意見;依設定排入串接佇列 */
+export function reviewVisit(visitId: string, comment: string) {
+  const at = nowIso();
+  setState((s) => ({
+    ...s,
+    visits: s.visits.map((v) => (v.id === visitId ? { ...v, review: { ...v.review, by: s.sessionUserId || '', at, comment } } : v)),
+  }));
+  if (getState().settings.integration?.trigger === 'on_review') enqueueOutbox(visitId, 'visit.reviewed');
+}
+
+/**
+ * 主管依這次拜訪設計下次訪談:新題目加入題庫(分類「客製追問」),
+ * 建立客戶專屬題組,並可直接排入複訪行程。
+ */
+export function createFollowupPlan(opts: {
+  visitId: string;
+  name: string;
+  note?: string;
+  items: { questionId?: string; text?: string; required: boolean }[];
+  schedule?: { date: string; time: string; salesId: string };
+}): { setId: string; scheduleId?: string } {
+  const s = getState();
+  const v = s.visits.find((x) => x.id === opts.visitId);
+  const at = nowIso();
+  let n = s.questions.reduce((m, x) => Math.max(m, Number(x.code.replace(/\D/g, '')) || 0), 0);
+  const newQs: Question[] = [];
+  const items = opts.items.map((it) => {
+    if (it.questionId) return { questionId: it.questionId, required: it.required };
+    n += 1;
+    const q: Question = { id: uid('q'), code: `Q${n}`, text: (it.text || '').trim(), category: '客製追問', active: true };
+    newQs.push(q);
+    return { questionId: q.id, required: it.required };
+  });
+  const setId = uid('qs');
+  const set: QuestionSet = { id: setId, name: opts.name, items, active: true, scope: 'customer', customerId: v?.customerId, fromVisitId: opts.visitId, note: opts.note };
+  const scheduleId = opts.schedule && v?.customerId ? uid('s') : undefined;
+  setState((st) => ({
+    ...st,
+    questions: [...st.questions, ...newQs],
+    questionSets: [...st.questionSets, set],
+    schedules:
+      scheduleId && opts.schedule && v?.customerId
+        ? [...st.schedules, { id: scheduleId, ...opts.schedule, customerId: v.customerId, visitType: '複訪', questionSetId: setId, note: opts.note, createdBy: st.sessionUserId || '', createdAt: at }]
+        : st.schedules,
+    visits: st.visits.map((x) => (x.id === opts.visitId ? { ...x, review: { by: x.review?.by || st.sessionUserId || '', at: x.review?.at || at, comment: x.review?.comment || '', nextSetId: setId, nextScheduleId: scheduleId } } : x)),
+  }));
+  return { setId, scheduleId };
+}
+
+/** 串接佇列(預留):產生標準 JSON 報告;串接未啟用時狀態為「保留」 */
+export function enqueueOutbox(visitId: string, event: OutboxItem['event']) {
+  const s = getState();
+  const v = s.visits.find((x) => x.id === visitId);
+  if (!v) return;
+  const cfg = s.settings.integration;
+  const item: OutboxItem = {
+    id: uid('ob'),
+    visitId,
+    target: cfg?.name || '未設定',
+    event,
+    status: 'held',
+    payload: JSON.stringify(buildVisitReport(s, v), null, 2),
+    createdAt: nowIso(),
+  };
+  setState((st) => ({ ...st, outbox: [item, ...(st.outbox || [])].slice(0, 200) }));
 }
 
 export function upsertSchedule(x: Omit<Schedule, 'id' | 'createdAt' | 'createdBy'> & { id?: string }) {

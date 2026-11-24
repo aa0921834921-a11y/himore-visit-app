@@ -4,6 +4,7 @@ import type {
   Customer,
   Fact,
   FactKind,
+  Insight,
   PrefSuggestion,
   Question,
   Segment,
@@ -262,6 +263,26 @@ function answerQuestions(input: AnalyzeInput, sents: Sentence[]): AnswerItem[] {
   });
 }
 
+/** 題庫之外談到的內容:依關鍵字分到 提醒/規避/商機/其他;已被題目或待辦用到的句子不重複列出 */
+function extractInsights(sents: Sentence[], answers: AnswerItem[], todos: TodoSuggestion[]): Insight[] {
+  const used = new Set(answers.flatMap((a) => a.sourceSegmentIds));
+  const out: Insight[] = [];
+  const seen = new Set<string>();
+  sents.forEach((s) => {
+    if (s.questionId || s.text.length < 6 || seen.has(s.text)) return;
+    if (todos.some((t) => s.text.includes(t.content.slice(0, 6)))) return;
+    let kind: Insight['kind'] | undefined;
+    if (/不想|不喜歡|不要|避免|別再|禁止|反感|不能提|敏感/.test(s.text)) kind = 'avoid';
+    else if (/注意|提醒|擔心|顧慮|一定要|務必|必須|要求|老闆|簽核|重視/.test(s.text)) kind = 'reminder';
+    else if (/新廠|擴廠|擴線|另一條|其他產線|介紹|轉介|明年|也有需求|也想/.test(s.text)) kind = 'opportunity';
+    else if (!used.has(s.segId) && !/^(這次|本次|今天)/.test(s.text)) kind = 'other';
+    if (!kind) return;
+    seen.add(s.text);
+    out.push({ id: uid('in'), kind, text: truncate(s.text, 60), sourceSegmentId: s.segId });
+  });
+  return out.slice(0, 10);
+}
+
 function suggestCustomer(sents: Sentence[], customers: Customer[]): string | undefined {
   const all = sents.map((s) => s.text).join(' ');
   const hit = customers.find((c) => {
@@ -337,19 +358,22 @@ export const mockAi: AiService = {
       objections: pickSentences(sents, RE.objections),
       nextSteps: pickSentences(sents, RE.nextSteps),
     };
+    const answers = answerQuestions(input, sents);
+    const todos = extractTodos(sents, input.salesId, input.visitAt);
     return {
       mock: true,
       suggestedCustomerId: input.customer ? undefined : customer?.id,
-      answers: answerQuestions(input, sents),
+      answers,
       summary,
       facts: extractFacts(sents),
       uncertainties: extractUncertainties(sents, input.segments),
       prefs: extractPrefs(sents, input.segments, customer),
-      todos: extractTodos(sents, input.salesId, input.visitAt),
+      todos,
+      insights: extractInsights(sents, answers, todos),
       generatedAt: new Date().toISOString(),
     };
   },
 };
 
 export const DEMO_TEXT =
-  '這次拜訪主要是確認導入規格與交期。\n客戶目前使用 350 噸射出機,共 6 台,正在評估 GT 系列取出機,預計導入 8 台,希望 12 月前完成。\n客戶希望縮短取出時間,但擔心與既有機台的整合。\n也有在比較日系廠牌的方案,預算大概 300 萬左右,還要老闆簽核。\n張經理表示不想再被比價,重視穩定品質與售後支援。\n我下週二前提供 GT 系列報價,並確認 8 台交期。';
+  '這次拜訪主要是確認導入規格與交期。\n客戶目前使用 350 噸射出機,共 6 台,正在評估 GT 系列取出機,預計導入 8 台,希望 12 月前完成。\n客戶希望縮短取出時間,但擔心與既有機台的整合。\n也有在比較日系廠牌的方案,預算大概 300 萬左右,還要老闆簽核。\n張經理表示不想再被比價,重視穩定品質與售後支援。\n另外客戶提到明年新廠還有一條產線也在規劃。\n我下週二前提供 GT 系列報價,並確認 8 台交期。';

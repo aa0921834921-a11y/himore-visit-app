@@ -9,7 +9,7 @@ import { fmtDate, fmtDateTime, toCsv } from '../lib/util';
 const STATUS_LABEL: Record<string, string> = {
   answered: '已回覆',
   partial: '部分回覆',
-  uncovered: '未涵蓋',
+  uncovered: '未蒐集',
   not_provided: '客戶未提供',
   na: '不適用',
 };
@@ -122,4 +122,25 @@ export async function readPickedText(uri: string, webFile?: unknown): Promise<st
     return res.text();
   }
   return new File(uri).text();
+}
+
+/** 存成一般文字檔(報告 .txt / .json) */
+export async function saveTextFile(filename: string, content: string, mimeType: string): Promise<void> {
+  if (Platform.OS === 'web') {
+    const blob = new Blob([content], { type: `${mimeType};charset=utf-8` });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = filename;
+    document.body.appendChild(a);
+    a.click();
+    a.remove();
+    setTimeout(() => URL.revokeObjectURL(url), 2000);
+    return;
+  }
+  const f = new File(Paths.cache, filename);
+  if (f.exists) f.delete();
+  f.create();
+  await f.write(content);
+  if (await Sharing.isAvailableAsync()) await Sharing.shareAsync(f.uri, { mimeType, dialogTitle: '匯出報告' });
 }

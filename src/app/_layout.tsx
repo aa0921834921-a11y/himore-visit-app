@@ -22,6 +22,21 @@ if (Platform.OS === 'web' && typeof document !== 'undefined') {
   meta.name = 'theme-color';
   meta.content = C.bg;
   document.head.appendChild(meta);
+  // 瀏覽器自動填入帳密時會把輸入框塗成淺藍色方塊,改成跟輸入框一樣的深色
+  const css = document.createElement('style');
+  css.textContent = `
+    input:-webkit-autofill, input:-webkit-autofill:hover, input:-webkit-autofill:focus, input:-webkit-autofill:active,
+    textarea:-webkit-autofill {
+      -webkit-box-shadow: 0 0 0 1000px #06171d inset !important;
+      box-shadow: 0 0 0 1000px #06171d inset !important;
+      -webkit-text-fill-color: #E6F1F2 !important;
+      caret-color: #E6F1F2;
+      border-radius: 999px;
+      transition: background-color 9999s ease-out 0s;
+    }
+    input:autofill { background-color: transparent !important; }
+  `;
+  document.head.appendChild(css);
 }
 
 function applyNetwork(st: Network.NetworkState) {

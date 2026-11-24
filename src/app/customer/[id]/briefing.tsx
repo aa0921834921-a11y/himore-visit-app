@@ -5,7 +5,7 @@ import { Header, Screen } from '../../../components/Screen';
 import { Button, Card, Chip, FactChip, Icon, KeyValue, Notice, Row, Txt } from '../../../components/ui';
 import { C, SP, T } from '../../../theme';
 import { useAppState } from '../../../store/store';
-import { avoidItems, customerById, knownAndPending, lastConfirmedVisit, openTodosOfCustomer, questionById, scheduleById, setById, suggestedSetId, userById } from '../../../store/selectors';
+import { avoidItems, customerById, knownAndPending, lastConfirmedVisit, openTodosOfCustomer, questionById, industriesOf, scheduleById, setById, suggestedSetId, userById } from '../../../store/selectors';
 import { audit } from '../../../store/actions';
 import { fmtDate } from '../../../lib/util';
 
@@ -53,9 +53,16 @@ export default function Briefing() {
         <Txt size={T.h2} weight="700">
           {c.name}
         </Txt>
+        {sch?.purpose ? (
+          <Txt color={C.teal} style={{ marginTop: 2 }}>
+            拜訪目的:{sch.purpose}
+          </Txt>
+        ) : null}
         {first ? (
           <>
-            <KeyValue k="產業" v={c.industry} />
+            <KeyValue k="產業別" v={industriesOf(c).join('、') || undefined} />
+            <KeyValue k="客戶分類" v={c.category} />
+            <KeyValue k="地址" v={c.address} />
             <KeyValue k="主要產品" v={c.mainProducts || '待了解'} />
             <KeyValue k="負責業務" v={userById(s, c.ownerId)?.name} />
           </>

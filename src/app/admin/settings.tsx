@@ -10,6 +10,7 @@ import { userById } from '../../store/selectors';
 import { updateSettings } from '../../store/actions';
 import { ai } from '../../services/ai';
 import { IntegrationPanel } from '../../components/IntegrationPanel';
+import { CustomerOptionsPanel } from '../../components/OptionsPanel';
 import { fmtDateTime } from '../../lib/util';
 import type { AuditType } from '../../types';
 
@@ -72,6 +73,7 @@ export default function AdminSettings() {
               <Field value={consent} onChangeText={setConsent} multiline hint="修改後版本號自動加一;同意紀錄會保存當時的版本與文字。內容需先經哈鏌法務確認。" />
               <Button title="儲存並更新版本" small variant="secondary" disabled={!consent.trim() || consent.trim() === st.consentText} onPress={saveConsent} />
             </Panel>
+            <CustomerOptionsPanel />
             <Panel title="專有名詞詞庫">
               <Txt size={T.small} color={C.text2} style={{ marginBottom: SP.sm }}>
                 供 AI 轉文字與整理時參考(例:GT、AT、ST 系列名稱)

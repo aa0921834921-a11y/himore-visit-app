@@ -13,18 +13,30 @@ export interface User {
   createdAt: string;
 }
 
+/** 聯絡人在採購決策中的角色 */
+export type DecisionRole = '決策者' | '影響者' | '技術評估' | '採購窗口' | '使用者' | '未確認';
+
 export interface Contact {
   id: string;
   name: string;
-  title?: string;
+  title?: string; // 職稱
+  department?: string; // 部門
   phone?: string;
+  email?: string;
+  decisionRole?: DecisionRole;
+  preference?: string; // 聯絡人偏好(聯絡方式、溝通風格等,手動填寫;AI 抓到的偏好另存於偏好與避免事項)
 }
 
 export interface Customer {
   id: string;
   code: string; // 例:C100328
   name: string;
-  industry?: string;
+  taxId?: string; // 統一編號
+  address?: string;
+  website?: string;
+  category?: string; // 客戶分類(選項由後台系統設定維護)
+  industries?: string[]; // 產業別(複選)
+  industry?: string; // 舊版單一產業欄位,僅相容舊資料
   mainProducts?: string;
   mainEquipment?: string;
   evaluatingSeries?: string;
@@ -72,6 +84,7 @@ export interface Schedule {
   customerId: string;
   visitType: VisitType;
   questionSetId: string;
+  purpose?: string; // 拜訪目的
   note?: string;
   visitId?: string; // 已開始記錄時連結的拜訪紀錄
   createdBy: string;
@@ -217,6 +230,7 @@ export interface AnalysisResult {
   prefs: PrefSuggestion[];
   todos: TodoSuggestion[];
   insights?: Insight[];
+  purpose?: string; // AI 找出的拜訪目的
   generatedAt: string;
 }
 
@@ -238,6 +252,7 @@ export interface Visit {
   visitAt: string;
   visitType: VisitType;
   questionSetId?: string;
+  purpose?: string; // 拜訪目的:安排時填寫,或由 AI 從內容找出
   source: InputSource;
   status: VisitStatus;
   upload: UploadState;
@@ -301,6 +316,8 @@ export interface Settings {
   notifyEnabled: boolean;
   uploadOnWifiOnly: boolean;
   integration?: IntegrationSettings;
+  industryOptions?: string[]; // 產業別選項
+  customerCategories?: string[]; // 客戶分類選項
 }
 
 /** 對外串接(預留):Webhook 或 API。POC 只產生標準格式的資料並排入佇列,不實際送出 */

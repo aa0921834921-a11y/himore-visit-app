@@ -29,6 +29,8 @@ export const DEFAULT_SETTINGS: Settings = {
   simulateFailureNext: false,
   notifyEnabled: true,
   uploadOnWifiOnly: false,
+  industryOptions: ['塑膠射出成型', '精密射出', '汽車零件', '家電零件', '3C 電子', '醫療器材', '包裝容器', '模具製造', '其他'],
+  customerCategories: ['潛在客戶', '新客戶', '既有客戶', '重點客戶', '經銷商'],
   integration: { enabled: false, kind: 'webhook', name: 'ERP / CRM(待決定)', url: '', authHeader: '', trigger: 'on_review' },
 };
 
@@ -58,28 +60,28 @@ export function buildSeed(): AppState {
 
   const customers: Customer[] = [
     {
-      id: 'c_hs', code: 'C100328', name: '宏昇塑膠有限公司', industry: '塑膠射出成型', mainEquipment: '350 噸射出機', evaluatingSeries: 'GT 系列',
-      ownerId: 'u_wang', contacts: [{ id: 'ct_1', name: '張經理', title: '採購經理', phone: '04-2350-1234' }, { id: 'ct_2', name: '李廠長', title: '廠長' }], createdAt: created,
+      id: 'c_hs', code: 'C100328', name: '宏昇塑膠有限公司', industries: ['塑膠射出成型', '家電零件'], category: '重點客戶', taxId: '24561238', address: '台中市西屯區工業區三十六路 12 號', website: 'https://www.hs-plastic.example', mainEquipment: '350 噸射出機', evaluatingSeries: 'GT 系列',
+      ownerId: 'u_wang', contacts: [{ id: 'ct_1', name: '張經理', title: '採購經理', department: '採購部', phone: '04-2350-1234', email: 'chang@hs-plastic.example', decisionRole: '採購窗口', preference: '偏好 Email 聯繫,上午較好約' }, { id: 'ct_2', name: '李廠長', title: '廠長', department: '製造部', decisionRole: '決策者' }], createdAt: created,
     },
     {
-      id: 'c_lm', code: 'C100456', name: '聯貿工業有限公司', industry: '塑膠射出成型', mainProducts: '待了解',
-      ownerId: 'u_wang', contacts: [{ id: 'ct_3', name: '黃課長', title: '生管課長' }], createdAt: created,
+      id: 'c_lm', code: 'C100456', name: '聯貿工業有限公司', industries: ['塑膠射出成型'], category: '潛在客戶', address: '桃園市楊梅區民族路五段 88 號', mainProducts: '待了解',
+      ownerId: 'u_wang', contacts: [{ id: 'ct_3', name: '黃課長', title: '生管課長', department: '生管課', decisionRole: '影響者' }], createdAt: created,
     },
     {
-      id: 'c_my', code: 'C100789', name: '明耀精密有限公司', industry: '精密射出', mainEquipment: '180 噸射出機', evaluatingSeries: 'AT 系列',
-      ownerId: 'u_wang', contacts: [{ id: 'ct_4', name: '吳協理', title: '製造協理' }], createdAt: created,
+      id: 'c_my', code: 'C100789', name: '明耀精密有限公司', industries: ['精密射出', '3C 電子'], category: '既有客戶', taxId: '53880126', mainEquipment: '180 噸射出機', evaluatingSeries: 'AT 系列',
+      ownerId: 'u_wang', contacts: [{ id: 'ct_4', name: '吳協理', title: '製造協理', department: '製造處', decisionRole: '決策者' }], createdAt: created,
     },
     {
-      id: 'c_ds', code: 'C100512', name: '鼎盛塑膠工業有限公司', industry: '家電零件射出', mainEquipment: '450 噸射出機',
-      ownerId: 'u_lin', contacts: [{ id: 'ct_5', name: '周經理', title: '工程經理' }], createdAt: created,
+      id: 'c_ds', code: 'C100512', name: '鼎盛塑膠工業有限公司', industries: ['家電零件'], category: '新客戶', mainEquipment: '450 噸射出機',
+      ownerId: 'u_lin', contacts: [{ id: 'ct_5', name: '周經理', title: '工程經理', department: '工程部', decisionRole: '技術評估' }], createdAt: created,
     },
     {
-      id: 'c_yq', code: 'C100603', name: '永群精密模具有限公司', industry: '模具與射出', evaluatingSeries: 'ST 系列',
+      id: 'c_yq', code: 'C100603', name: '永群精密模具有限公司', industries: ['模具製造', '塑膠射出成型'], category: '潛在客戶', evaluatingSeries: 'ST 系列',
       ownerId: 'u_wang', contacts: [], createdAt: created,
     },
     {
-      id: 'c_tz', code: 'C100671', name: '台展科技股份有限公司', industry: '汽車零件射出', mainEquipment: '650 噸射出機',
-      ownerId: 'u_lin', contacts: [{ id: 'ct_6', name: '蔡副理', title: '設備副理' }], createdAt: created,
+      id: 'c_tz', code: 'C100671', name: '台展科技股份有限公司', industries: ['汽車零件'], category: '既有客戶', mainEquipment: '650 噸射出機',
+      ownerId: 'u_lin', contacts: [{ id: 'ct_6', name: '蔡副理', title: '設備副理', department: '設備課', decisionRole: '技術評估' }], createdAt: created,
     },
   ];
 
@@ -120,8 +122,8 @@ export function buildSeed(): AppState {
   ];
 
   const schedules: Schedule[] = [
-    { id: 's_1', date: today, time: '09:30', salesId: 'u_wang', customerId: 'c_hs', visitType: '複訪', questionSetId: 'qs_track', note: '確認 8 台交期', createdBy: 'u_chen', createdAt: created },
-    { id: 's_2', date: today, time: '11:00', salesId: 'u_wang', customerId: 'c_lm', visitType: '初次', questionSetId: 'qs_new', note: '了解現有設備', createdBy: 'u_chen', createdAt: created },
+    { id: 's_1', date: today, time: '09:30', salesId: 'u_wang', customerId: 'c_hs', visitType: '複訪', questionSetId: 'qs_track', purpose: '回覆 GT 系列報價並確認交期', note: '確認 8 台交期', createdBy: 'u_chen', createdAt: created },
+    { id: 's_2', date: today, time: '11:00', salesId: 'u_wang', customerId: 'c_lm', visitType: '初次', questionSetId: 'qs_new', purpose: '初次拜訪,了解現有設備與擴線計畫', note: '了解現有設備', createdBy: 'u_chen', createdAt: created },
     { id: 's_3', date: today, time: '14:30', salesId: 'u_wang', customerId: 'c_my', visitType: '複訪', questionSetId: 'qs_expand', createdBy: 'u_chen', createdAt: created },
     { id: 's_4', date: today, time: '10:00', salesId: 'u_lin', customerId: 'c_ds', visitType: '初次', questionSetId: 'qs_new', createdBy: 'u_chen', createdAt: created },
     { id: 's_5', date: ymd(addDays(now, 1)), time: '15:00', salesId: 'u_wang', customerId: 'c_yq', visitType: '初次', questionSetId: 'qs_new', createdBy: 'u_chen', createdAt: created },

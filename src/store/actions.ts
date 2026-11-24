@@ -67,6 +67,7 @@ export function createDraftVisit(opts: { scheduleId?: string; customerId?: strin
     visitAt: at.toISOString(),
     visitType: sch?.visitType || customerVisitType(s, customerId),
     questionSetId: sch?.questionSetId || opts.questionSetId,
+    purpose: sch?.purpose,
     source: opts.source,
     status: 'draft',
     upload: 'pending',
@@ -168,7 +169,11 @@ export function addCustomer(input: Partial<Customer> & { name: string }): Custom
     id: uid('c'),
     code: input.code?.trim() || nextCustomerCode(s),
     name: input.name.trim(),
-    industry: input.industry,
+    taxId: input.taxId,
+    address: input.address,
+    website: input.website,
+    category: input.category,
+    industries: input.industries,
     mainProducts: input.mainProducts,
     mainEquipment: input.mainEquipment,
     evaluatingSeries: input.evaluatingSeries,
@@ -192,34 +197,75 @@ export function addContact(customerId: string, contact: Omit<Contact, 'id'>) {
   }));
 }
 
-export function importCustomers(rows: { name: string; contact?: string; owner?: string }[]): { added: number; skipped: number } {
+export function updateContact(customerId: string, contact: Contact) {
+  setState((s) => ({
+    ...s,
+    customers: s.customers.map((c) => (c.id === customerId ? { ...c, contacts: c.contacts.map((x) => (x.id === contact.id ? contact : x)) } : c)),
+  }));
+}
+
+export function removeContact(customerId: string, contactId: string) {
+  setState((s) => ({
+    ...s,
+    customers: s.customers.map((c) => (c.id === customerId ? { ...c, contacts: c.contacts.filter((x) => x.id !== contactId) } : c)),
+  }));
+}
+
+export interface CustomerImportRow {
+  name: string;
+  taxId?: string;
+  address?: string;
+  website?: string;
+  category?: string;
+  owner?: string;
+  industries?: string[];
+  contact?: Omit<Contact, 'id'>;
+}
+
+export function importCustomers(rows: CustomerImportRow[]): { added: number; skipped: number; contacts: number } {
   const s = getState();
   let added = 0;
   let skipped = 0;
+  let contacts = 0;
   let seq = Number(nextCustomerCode(s).slice(1));
   const existing = new Set(s.customers.map((c) => c.name));
-  const fresh: Customer[] = [];
+  const fresh = new Map<string, Customer>();
   rows.forEach((r) => {
     const name = r.name.trim();
+    const ct = r.contact?.name?.trim() ? { ...r.contact, name: r.contact.name.trim(), id: uid('ct') } : undefined;
+    // 同一公司多列:第一列建立公司,後面的列只加聯絡人
+    const same = fresh.get(name);
+    if (same) {
+      if (ct) {
+        same.contacts.push(ct);
+        contacts++;
+      }
+      return;
+    }
     if (!name || existing.has(name)) {
       skipped++;
       return;
     }
     const owner = s.users.find((u) => u.name === r.owner?.trim() || u.account === r.owner?.trim());
-    fresh.push({
+    fresh.set(name, {
       id: uid('c'),
       code: `C${seq++}`,
       name,
+      taxId: r.taxId?.trim() || undefined,
+      address: r.address?.trim() || undefined,
+      website: r.website?.trim() || undefined,
+      category: r.category?.trim() || undefined,
+      industries: r.industries?.length ? r.industries : undefined,
       ownerId: owner?.id || '',
-      contacts: r.contact?.trim() ? [{ id: uid('ct'), name: r.contact.trim() }] : [],
+      contacts: ct ? [ct] : [],
       createdAt: nowIso(),
     });
-    existing.add(name);
+    if (ct) contacts++;
     added++;
   });
-  setState((st) => ({ ...st, customers: [...fresh, ...st.customers] }));
-  audit('import', `匯入客戶 ${added} 筆,略過 ${skipped} 筆`);
-  return { added, skipped };
+  setState((st) => ({ ...st, customers: [...Array.from(fresh.values()), ...st.customers] }));
+  audit('import', `匯入客戶 ${added} 筆、聯絡人 ${contacts} 位,略過 ${skipped} 筆`);
+  return { added, skipped, contacts };
 }
 
 // ---------- 待辦與偏好 ----------

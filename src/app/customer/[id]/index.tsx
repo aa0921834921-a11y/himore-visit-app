@@ -3,12 +3,15 @@ import { View } from 'react-native';
 import { router, useLocalSearchParams } from 'expo-router';
 import { Header, Screen } from '../../../components/Screen';
 import { Button, Card, Checkbox, Chip, EmptyState, FactChip, IconButton, KeyValue, ListRow, Notice, Row, Segmented, Txt } from '../../../components/ui';
-import { confirmDialog, promptDialog } from '../../../components/Dialog';
+import { confirmDialog } from '../../../components/Dialog';
+import { ContactRow, ContactSheet } from '../../../components/ContactSheet';
 import { C, SP, T } from '../../../theme';
 import { useAppState } from '../../../store/store';
-import { avoidItems, confirmedVisitsOf, currentUser, customerById, customerVisitType, lastConfirmedVisit, openTodosOfCustomer, userById } from '../../../store/selectors';
-import { addContact, deletePreference, toggleTodo } from '../../../store/actions';
+import { avoidItems, confirmedVisitsOf, currentUser, customerById, customerVisitType, industriesOf, lastConfirmedVisit, openTodosOfCustomer, purposeOf, userById } from '../../../store/selectors';
+import { deletePreference, toggleTodo } from '../../../store/actions';
 import { fmtDate, fmtShortDate, truncate } from '../../../lib/util';
+
+import type { Contact } from '../../../types';
 
 type Tab = 'overview' | 'visits' | 'contacts' | 'prefs';
 
@@ -18,6 +21,7 @@ export default function CustomerDetail() {
   const s = useAppState();
   const me = currentUser(s);
   const [tab, setTab] = useState<Tab>('overview');
+  const [contactEdit, setContactEdit] = useState<Contact | 'new' | null>(null);
   const c = customerById(s, id);
   if (!c) return null;
   if (me?.role === 'sales' && c.ownerId !== me.id) {
@@ -45,7 +49,13 @@ export default function CustomerDetail() {
             </Txt>
             <Txt size={T.small} color={C.text2}>
               客戶編號 {c.code}
+              {c.taxId ? `・統編 ${c.taxId}` : ''}
             </Txt>
+            {c.category ? (
+              <Row style={{ marginTop: 4 }}>
+                <Chip label={c.category} tone="teal" />
+              </Row>
+            ) : null}
           </View>
           <Chip label={type} tone={type === '初次' ? 'teal' : 'orange'} />
         </Row>
@@ -75,7 +85,9 @@ export default function CustomerDetail() {
       {tab === 'overview' ? (
         <>
           <Card style={{ marginBottom: SP.md }}>
-            <KeyValue k="產業" v={c.industry} />
+            <KeyValue k="產業別" v={industriesOf(c).join('、') || undefined} />
+            <KeyValue k="地址" v={c.address} />
+            <KeyValue k="網站" v={c.website} />
             <KeyValue k="主要設備" v={c.mainEquipment} />
             <KeyValue k="評估系列" v={c.evaluatingSeries} />
             <KeyValue k="主要產品" v={c.mainProducts} />
@@ -113,7 +125,12 @@ export default function CustomerDetail() {
       {tab === 'visits' ? (
         visits.length ? (
           visits.map((v) => (
-            <ListRow key={v.id} title={`${fmtDate(v.visitAt)}・${v.code}`} sub={truncate(v.ai?.summary.keyPoints.text || '', 60)} onPress={() => router.push(`/visit/${v.id}`)} />
+            <ListRow
+              key={v.id}
+              title={`${fmtDate(v.visitAt)}・${userById(s, v.salesId)?.name || ''}・${v.visitType}`}
+              sub={truncate(`${purposeOf(v, s) ? `目的:${purposeOf(v, s)}|` : ''}需求:${v.ai?.summary.needs.text || '—'}`, 70)}
+              onPress={() => router.push(`/visit/${v.id}`)}
+            />
           ))
         ) : (
           <EmptyState text="尚無已入庫的拜訪紀錄。未確認的內容不會出現在這裡。" />
@@ -123,21 +140,19 @@ export default function CustomerDetail() {
       {tab === 'contacts' ? (
         <>
           {c.contacts.length ? (
-            c.contacts.map((ct) => <ListRow key={ct.id} title={ct.name} sub={[ct.title, ct.phone].filter(Boolean).join('・') || undefined} right={null} />)
+            c.contacts.map((ct) => (
+              <ContactRow
+                key={ct.id}
+                ct={ct}
+                extra={prefs.filter((p) => p.target === 'contact' && p.targetName === ct.name).map((p) => `${p.type === 'avoid' ? '避免' : '偏好'}:${p.content}`)}
+                onPress={() => setContactEdit(ct)}
+              />
+            ))
           ) : (
             <EmptyState text="尚無聯絡人" />
           )}
-          <Button
-            title="+新增聯絡人"
-            variant="secondary"
-            small
-            onPress={async () => {
-              const name = await promptDialog({ title: '新增聯絡人', placeholder: '姓名或稱呼(例:張經理)' });
-              if (!name?.trim()) return;
-              const title = await promptDialog({ title: '職稱(可略過)', placeholder: '例:採購經理' });
-              addContact(c.id, { name: name.trim(), title: title?.trim() || undefined });
-            }}
-          />
+          <Button title="+新增聯絡人" variant="secondary" small onPress={() => setContactEdit('new')} />
+          <ContactSheet customerId={c.id} visible={!!contactEdit} contact={contactEdit === 'new' ? null : contactEdit} onClose={() => setContactEdit(null)} />
         </>
       ) : null}
 

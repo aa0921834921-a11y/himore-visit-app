@@ -128,7 +128,7 @@ export default function AdminVisits() {
 
       <Panel style={{ marginTop: SP.lg }} title="CSV 匯出說明">
         <Txt size={T.small} color={C.text2} style={{ marginBottom: SP.sm }}>
-          CSV 欄位:拜訪編號、客戶編號、業務、日期、拜訪類型、題目與回覆、摘要、待辦、確認時間(另附客戶名稱、輸入來源、狀態、偏好與避免事項)。檔案為 UTF-8,可直接用 Excel 開啟。
+          CSV 欄位:客戶(編號、名稱、統編、分類、產業別)+拜訪互動(拜訪日期、拜訪人員、類型、目的、需求、追蹤事項)+題目與回覆、摘要、偏好與避免事項、補充內容、附件、確認時間。檔案為 UTF-8,可直接用 Excel 開啟。
         </Txt>
         <Checkbox checked={restricted} onPress={() => setRestricted(!restricted)} label="包含「限定」敏感度的偏好與避免事項" sub="標為「限定」敏感度的偏好與避免事項,預設不匯出" />
         <Notice tone="gray" icon="sync" text="對外串接(Webhook / API):請到「系統設定 → 對外串接」設定;目前為預留,只排入佇列不實際送出。" />

@@ -152,8 +152,14 @@ export default function AdminReview() {
         }
       />
       <Panel>
-        <Txt size={T.h3} weight="700">
-          {c?.name || '未指定客戶'}
+        <Row style={{ justifyContent: 'space-between' }}>
+          <Txt size={T.h3} weight="700">
+            {c?.name || '未指定客戶'}
+          </Txt>
+          {c ? <Button title="客戶資料" small full={false} variant="ghost" onPress={() => router.push('/admin/customers')} /> : null}
+        </Row>
+        <Txt size={T.small} color={C.text2}>
+          {[r.customer.taxId ? `統編 ${r.customer.taxId}` : '', r.customer.category, r.customer.industries.join('、')].filter(Boolean).join('|') || '尚未填寫統編/分類/產業別'}
         </Txt>
         <Row style={{ flexWrap: 'wrap', marginVertical: SP.sm }}>
           <Chip label={v.visitType} tone="orange" />
@@ -161,8 +167,29 @@ export default function AdminReview() {
           {r.questionSet ? <Chip label={`${r.questionSet.scope === 'customer' ? '專屬' : '模板'}:${r.questionSet.name}`} tone="gray" icon="bank" /> : null}
         </Row>
         <KeyValue k="拜訪編號" v={v.code} />
-        <KeyValue k="拜訪時間" v={fmtDateTime(v.visitAt)} />
-        <KeyValue k="業務" v={userById(s, v.salesId)?.name} />
+      </Panel>
+      <Panel title="拜訪互動">
+        <KeyValue k="拜訪日期" v={fmtDateTime(r.interaction.date)} />
+        <KeyValue k="拜訪人員" v={r.interaction.staff} />
+        <KeyValue k="目的" v={r.interaction.purpose} />
+        <KeyValue k="需求" v={r.interaction.needs} />
+        <Txt size={T.small} color={C.text2} style={{ marginTop: SP.xs }}>
+          追蹤事項
+        </Txt>
+        {r.interaction.followUps.length ? (
+          r.interaction.followUps.map((x, i) => (
+            <Txt key={i} style={{ marginTop: 2 }}>
+              ・{x}
+            </Txt>
+          ))
+        ) : (
+          <Txt color={C.text3}>—</Txt>
+        )}
+        {r.customer.contacts.length ? (
+          <Txt size={T.small} color={C.text2} style={{ marginTop: SP.sm }}>
+            聯絡人:{r.customer.contacts.map((x) => `${x.name}${x.decisionRole ? `(${x.decisionRole})` : ''}`).join('、')}
+          </Txt>
+        ) : null}
       </Panel>
       {wide ? (
         <Row style={{ alignItems: 'flex-start' }} gap={SP.lg}>

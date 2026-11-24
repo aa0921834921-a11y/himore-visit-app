@@ -1,5 +1,5 @@
 import type { AppState, Insight, InsightKind, Visit } from '../types';
-import { customerById, questionById, setById, userById } from '../store/selectors';
+import { customerById, industriesOf, purposeOf, questionById, setById, userById } from '../store/selectors';
 import { fmtDate, fmtDateTime } from '../lib/util';
 
 // 拜訪報告:把題庫比對結果與「題庫之外」談到的內容分類彙整。
@@ -21,7 +21,20 @@ export interface VisitReport {
   schema: string;
   generatedAt: string;
   visit: { id: string; code: string; type: string; at: string; source: string; status: string; confirmedAt?: string };
-  customer: { id?: string; code?: string; name?: string };
+  customer: {
+    id?: string;
+    code?: string;
+    name?: string;
+    taxId?: string;
+    address?: string;
+    website?: string;
+    category?: string;
+    owner?: string;
+    industries: string[];
+    contacts: { name: string; title?: string; department?: string; phone?: string; email?: string; decisionRole?: string; preference?: string }[];
+  };
+  /** 拜訪互動:拜訪日期/拜訪人員/目的/需求/追蹤事項 */
+  interaction: { date: string; staff?: string; purpose?: string; needs?: string; followUps: string[] };
   sales: { id: string; name?: string };
   questionSet?: { id: string; name: string; scope: string };
   coverage: { total: number; collected: number; missing: number; missingRequired: number };
@@ -56,7 +69,28 @@ export function buildVisitReport(s: AppState, v: Visit): VisitReport {
     schema: REPORT_SCHEMA,
     generatedAt: new Date().toISOString(),
     visit: { id: v.id, code: v.code, type: v.visitType, at: v.visitAt, source: v.source, status: v.status, confirmedAt: v.confirmedAt },
-    customer: { id: c?.id, code: c?.code, name: c?.name },
+    customer: {
+      id: c?.id,
+      code: c?.code,
+      name: c?.name,
+      taxId: c?.taxId,
+      address: c?.address,
+      website: c?.website,
+      category: c?.category,
+      owner: userById(s, c?.ownerId)?.name,
+      industries: industriesOf(c),
+      contacts: (c?.contacts || []).map(({ id: _id, ...rest }) => rest),
+    },
+    interaction: {
+      date: v.visitAt,
+      staff: userById(s, v.salesId)?.name,
+      purpose: purposeOf(v, s),
+      needs: a && a.summary.needs.text !== '未知' ? a.summary.needs.text : undefined,
+      followUps: [
+        ...todos.map((t) => `${t.content}${t.due ? `(${fmtDate(t.due)})` : ''}`),
+        ...(a && a.summary.nextSteps.text !== '未知' && !todos.length ? [a.summary.nextSteps.text] : []),
+      ],
+    },
     sales: { id: v.salesId, name: userById(s, v.salesId)?.name },
     questionSet: set ? { id: set.id, name: set.name, scope: set.scope || 'template' } : undefined,
     coverage: { total: answers.length, collected, missing: missing.length, missingRequired: missing.filter((x) => x.required).length },
@@ -80,17 +114,41 @@ export function buildVisitReport(s: AppState, v: Visit): VisitReport {
 
 export function reportToText(r: VisitReport): string {
   const L: string[] = [];
+  const kv = (k: string, val?: string) => L.push(`  ${k}:${val || '—'}`);
   L.push(`【拜訪報告】${r.customer.name || '未指定客戶'}(${r.customer.code || '—'})`);
-  L.push(`${r.visit.code}|${fmtDateTime(r.visit.at)}|${r.visit.type}|業務:${r.sales.name || '—'}`);
-  if (r.questionSet) L.push(`題組:${r.questionSet.name}`);
+  L.push(`${r.visit.code}|${r.visit.type}${r.questionSet ? `|題組:${r.questionSet.name}` : ''}`);
   L.push('');
-  L.push(`一、問題蒐集狀況:已蒐集 ${r.coverage.collected} / ${r.coverage.total},未蒐集 ${r.coverage.missing}(必答 ${r.coverage.missingRequired})`);
+  L.push('1-1 公司基本資料');
+  kv('公司名稱', r.customer.name);
+  kv('統編', r.customer.taxId);
+  kv('地址', r.customer.address);
+  kv('網站', r.customer.website);
+  kv('客戶分類', r.customer.category);
+  kv('負責業務', r.customer.owner);
+  L.push('');
+  L.push('1-2 聯絡人資料');
+  if (!r.customer.contacts.length) L.push('  (無)');
+  r.customer.contacts.forEach((c) =>
+    L.push(`  ・${c.name}|${[c.title, c.department].filter(Boolean).join('/') || '—'}|${c.phone || '—'}|${c.email || '—'}|決策角色:${c.decisionRole || '—'}${c.preference ? `|偏好:${c.preference}` : ''}`),
+  );
+  L.push('');
+  L.push(`1-3 產業別:${r.customer.industries.join('、') || '—'}`);
+  L.push('');
+  L.push('拜訪互動');
+  kv('拜訪日期', fmtDateTime(r.interaction.date));
+  kv('拜訪人員', r.interaction.staff);
+  kv('目的', r.interaction.purpose);
+  kv('需求', r.interaction.needs);
+  L.push(`  追蹤事項:${r.interaction.followUps.length ? '' : '—'}`);
+  r.interaction.followUps.forEach((x) => L.push(`    ・${x}`));
+  L.push('');
+  L.push(`問題蒐集狀況:已蒐集 ${r.coverage.collected} / ${r.coverage.total},未蒐集 ${r.coverage.missing}(必答 ${r.coverage.missingRequired})`);
   r.questions.forEach((q) => L.push(`  ${q.status === 'uncovered' ? '✗' : '✓'} ${q.code} ${q.text}${q.required ? '[必答]' : ''}:${q.answer || q.statusLabel}${q.reason ? `(${q.reason})` : ''}`));
   L.push('');
-  L.push('二、重點摘要');
+  L.push('重點摘要');
   Object.entries(r.summary).forEach(([k, val]) => L.push(`  ${k}:${val}`));
   L.push('');
-  L.push('三、題庫之外的內容');
+  L.push('題庫之外的內容');
   const sec = (title: string, items: string[]) => {
     L.push(`  ◆ ${title}`);
     if (!items.length) L.push('    (無)');
@@ -103,13 +161,13 @@ export function reportToText(r: VisitReport): string {
   sec(INSIGHT_LABEL.other, r.outOfScope.others);
   if (r.attachments.length || r.supplements.length) {
     L.push('');
-    L.push('四、附件與補充');
+    L.push('附件與補充');
     r.supplements.forEach((x) => L.push(`  ・${x.kind === 'text' ? '補充文字' : '補充口述'}:${x.text}`));
     r.attachments.forEach((x) => L.push(`  ・${x.kind === 'photo' ? '照片' : '檔案'}:${x.name}`));
   }
   if (r.review) {
     L.push('');
-    L.push(`五、主管審閱(${r.review.by || '—'} ${fmtDateTime(r.review.at)})`);
+    L.push(`主管審閱(${r.review.by || '—'} ${fmtDateTime(r.review.at)})`);
     L.push(`  ${r.review.comment || '(無意見)'}`);
     if (r.review.nextQuestionSet) L.push(`  下次訪談題組:${r.review.nextQuestionSet}`);
   }

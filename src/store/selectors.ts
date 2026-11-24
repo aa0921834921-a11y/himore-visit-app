@@ -110,3 +110,20 @@ export function suggestedSetId(s: AppState, customerId: string | undefined, visi
 export function visitsToReview(s: AppState): Visit[] {
   return s.visits.filter((v) => v.status === 'confirmed' && !v.review?.comment && !v.review?.nextSetId).sort((a, b) => b.visitAt.localeCompare(a.visitAt));
 }
+
+/** 產業別(複選);相容舊資料的單一產業欄位 */
+export function industriesOf(c?: Customer): string[] {
+  if (!c) return [];
+  return c.industries?.length ? c.industries : c.industry ? [c.industry] : [];
+}
+
+export const DECISION_ROLES = ['決策者', '影響者', '技術評估', '採購窗口', '使用者', '未確認'] as const;
+
+/** 拜訪目的:業務/主管填寫的優先,其次 AI 找出的,再其次題庫中「目的」那一題的回覆 */
+export function purposeOf(v?: Visit, s?: AppState): string | undefined {
+  if (!v) return undefined;
+  if (v.purpose || v.ai?.purpose) return v.purpose || v.ai?.purpose;
+  if (!s) return undefined;
+  const a = v.ai?.answers.find((x) => x.answer && questionById(s, x.questionId)?.text.includes('目的'));
+  return a?.answer;
+}

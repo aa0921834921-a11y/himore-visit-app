@@ -9,7 +9,7 @@ import { OutOfScope } from '../../../components/Report';
 import { buildVisitReport } from '../../../services/report';
 import { C, SP, T } from '../../../theme';
 import { showToast, useAppState } from '../../../store/store';
-import { currentUser, customerById, isHandled, questionById, setById, userById, visitById } from '../../../store/selectors';
+import { currentUser, customerById, isHandled, purposeOf, questionById, setById, userById, visitById } from '../../../store/selectors';
 import { audit } from '../../../store/actions';
 import { answerStatusLabel, copyText, VISIT_STATUS_LABEL, visitToText } from '../../../services/export';
 import { fmtDateTime, fmtShortDate } from '../../../lib/util';
@@ -43,6 +43,7 @@ export default function VisitDetail() {
         </Txt>
         <KeyValue k="拜訪時間" v={fmtDateTime(v.visitAt)} />
         <KeyValue k="業務" v={userById(s, v.salesId)?.name} />
+        <KeyValue k="拜訪目的" v={purposeOf(v, s)} />
         <KeyValue k="題組" v={setById(s, v.questionSetId)?.name} />
         <KeyValue k="確認時間" v={v.confirmedAt ? fmtDateTime(v.confirmedAt) : undefined} />
         <Row style={{ marginTop: SP.sm }}>

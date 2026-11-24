@@ -22,7 +22,7 @@ export default function AdminSchedule() {
   const [page, setPage] = useState(1);
   const [open, setOpen] = useState<Schedule | 'new' | null>(null);
   const [pickCustomer, setPickCustomer] = useState(false);
-  const [f, setF] = useState({ date: ymd(), time: '10:00', salesId: '', customerId: '', visitType: '初次' as VisitType, questionSetId: '', note: '' });
+  const [f, setF] = useState({ date: ymd(), time: '10:00', salesId: '', customerId: '', visitType: '初次' as VisitType, questionSetId: '', purpose: '', note: '' });
   const [weekStart, setWeekStart] = useState(() => {
     const d = new Date();
     return addDays(d, -((d.getDay() + 6) % 7));
@@ -45,8 +45,8 @@ export default function AdminSchedule() {
 
   const openForm = (x: Schedule | 'new') => {
     setOpen(x);
-    if (x === 'new') setF({ date: ymd(), time: '10:00', salesId: salesUsers(s)[0]?.id || '', customerId: '', visitType: '初次', questionSetId: defaultFirstSet(s)?.id || '', note: '' });
-    else setF({ date: x.date, time: x.time, salesId: x.salesId, customerId: x.customerId, visitType: x.visitType, questionSetId: x.questionSetId, note: x.note || '' });
+    if (x === 'new') setF({ date: ymd(), time: '10:00', salesId: salesUsers(s)[0]?.id || '', customerId: '', visitType: '初次', questionSetId: defaultFirstSet(s)?.id || '', purpose: '', note: '' });
+    else setF({ date: x.date, time: x.time, salesId: x.salesId, customerId: x.customerId, visitType: x.visitType, questionSetId: x.questionSetId, purpose: x.purpose || '', note: x.note || '' });
   };
 
   const valid = /^\d{4}-\d{2}-\d{2}$/.test(f.date) && /^\d{1,2}:\d{2}$/.test(f.time) && f.salesId && f.customerId && f.questionSetId;
@@ -92,7 +92,7 @@ export default function AdminSchedule() {
               { key: 'c', title: '客戶', render: (r) => customerById(s, r.customerId)?.name || '—' },
               { key: 't', title: '拜訪類型', width: 90, render: (r) => <Chip label={r.visitType} tone={r.visitType === '初次' ? 'teal' : 'orange'} /> },
               { key: 'q', title: '題組', render: (r) => setById(s, r.questionSetId)?.name || '—' },
-              { key: 'n', title: '備註', render: (r) => r.note || '—' },
+              { key: 'n', title: '目的/備註', render: (r) => [r.purpose, r.note].filter(Boolean).join('|') || '—' },
               {
                 key: 'x',
                 title: '',
@@ -162,7 +162,7 @@ export default function AdminSchedule() {
             disabled={!valid}
             onPress={() => {
               const t = f.time.padStart(5, '0');
-              upsertSchedule({ id: open && open !== 'new' ? open.id : undefined, date: f.date, time: t, salesId: f.salesId, customerId: f.customerId, visitType: f.visitType, questionSetId: f.questionSetId, note: f.note.trim() || undefined, visitId: open && open !== 'new' ? open.visitId : undefined });
+              upsertSchedule({ id: open && open !== 'new' ? open.id : undefined, date: f.date, time: t, salesId: f.salesId, customerId: f.customerId, visitType: f.visitType, questionSetId: f.questionSetId, purpose: f.purpose.trim() || undefined, note: f.note.trim() || undefined, visitId: open && open !== 'new' ? open.visitId : undefined });
               setOpen(null);
             }}
           />
@@ -209,6 +209,7 @@ export default function AdminSchedule() {
             <Chip key={x.id} label={`${x.scope === 'customer' ? '專屬・' : x.defaultFirstVisit ? '★ ' : ''}${x.name}`} tone={f.questionSetId === x.id ? 'orange' : x.scope === 'customer' ? 'teal' : 'gray'} onPress={() => setF({ ...f, questionSetId: x.id })} style={{ height: 32, paddingHorizontal: 12 }} />
           ))}
         </Row>
+        <Field label="拜訪目的" value={f.purpose} onChangeText={(t) => setF({ ...f, purpose: t })} placeholder="例:初次拜訪,了解現有設備與擴線計畫" />
         <Field label="備註" value={f.note} onChangeText={(t) => setF({ ...f, note: t })} placeholder="例:確認 8 台交期" />
       </Sheet>
       <CustomerPicker

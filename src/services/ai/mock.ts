@@ -283,6 +283,13 @@ function extractInsights(sents: Sentence[], answers: AnswerItem[], todos: TodoSu
   return out.slice(0, 10);
 }
 
+/** 拜訪目的:「這次/本次/今天…主要是…」之類的句子 */
+function extractPurpose(sents: Sentence[]): string | undefined {
+  const hit = sents.find((s) => /(這次|本次|今天|今日).{0,6}(主要|目的|來)|主要(是|想)|拜訪目的/.test(s.text));
+  if (!hit) return undefined;
+  return truncate(hit.text.replace(/^(業務[::])?(這次|本次|今天|今日)?(拜訪)?(的)?(主要)?(目的)?(是|想|為)?/, '').replace(/[。.]$/, ''), 40) || undefined;
+}
+
 function suggestCustomer(sents: Sentence[], customers: Customer[]): string | undefined {
   const all = sents.map((s) => s.text).join(' ');
   const hit = customers.find((c) => {
@@ -370,6 +377,7 @@ export const mockAi: AiService = {
       prefs: extractPrefs(sents, input.segments, customer),
       todos,
       insights: extractInsights(sents, answers, todos),
+      purpose: extractPurpose(sents),
       generatedAt: new Date().toISOString(),
     };
   },

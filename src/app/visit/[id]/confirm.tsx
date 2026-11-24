@@ -8,12 +8,13 @@ import { CustomerPicker, ReasonSheet } from '../../../components/Pickers';
 import { SourceSheet } from '../../../components/SourceSheet';
 import { PrefSheet } from '../../../components/PrefSheet';
 import { Sheet } from '../../../components/Sheet';
+import { promptDialog } from '../../../components/Dialog';
 import { AttachmentList } from '../../../components/Attachments';
 import { OutOfScope } from '../../../components/Report';
 import { buildVisitReport } from '../../../services/report';
 import { C, R, SP, T } from '../../../theme';
 import { useAppState } from '../../../store/store';
-import { currentUser, customerById, isHandled, questionById, requiredProgress, salesUsers, setById, userById, visitById } from '../../../store/selectors';
+import { currentUser, customerById, isHandled, purposeOf, questionById, requiredProgress, salesUsers, setById, userById, visitById } from '../../../store/selectors';
 import { confirmVisit, patchVisit } from '../../../store/actions';
 import { answerStatusLabel } from '../../../services/export';
 import { addDays, fmtDateTime, fmtShortDate, uid, ymd } from '../../../lib/util';
@@ -145,6 +146,20 @@ export default function Confirm() {
             </Txt>
           </View>
           {editable && !v.scheduleId ? <Icon name="edit" size={18} color={C.text2} /> : null}
+        </Pressable>
+        <Pressable
+          disabled={!editable}
+          onPress={async () => {
+            const t = await promptDialog({ title: '拜訪目的', initial: purposeOf(v, s) || '', placeholder: '例:確認導入規格與交期' });
+            if (t !== null) patchVisit(v.id, { purpose: t.trim() || undefined });
+          }}
+          style={{ flexDirection: 'row', alignItems: 'center', marginTop: SP.sm }}
+        >
+          <Txt size={T.small} color={purposeOf(v, s) ? C.text : C.yellow} style={{ flex: 1 }}>
+            拜訪目的:{purposeOf(v, s) || '未填寫(點此補上)'}
+            {!v.purpose && v.ai?.purpose ? '(AI 判斷)' : ''}
+          </Txt>
+          {editable ? <Icon name="edit" size={16} color={C.text2} /> : null}
         </Pressable>
         <Row style={{ marginTop: SP.sm, flexWrap: 'wrap' }}>
           <Chip label={SRC[v.source]} tone="orange" icon={v.source === 'recording' ? 'mic' : v.source === 'dictation' ? 'dictate' : 'text'} />

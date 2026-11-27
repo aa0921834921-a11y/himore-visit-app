@@ -8,12 +8,14 @@ export interface TranscribeInput {
   source: InputSource;
   audioUri?: string;
   audioDurationMs?: number;
+  audioParts?: { uri: string; durationMs: number }[];
   text?: string;
   dictation?: DictationAnswer[];
   questions: Question[];
   marks?: number[];
   supplements?: Supplement[];
   attachments?: Attachment[];
+  onProgress?: (msg: string) => void;
 }
 
 export interface AnalyzeInput {
@@ -26,6 +28,7 @@ export interface AnalyzeInput {
   salesId: string;
   glossary: string[];
   visitAt: string;
+  onProgress?: (msg: string) => void;
 }
 
 export interface AiService {

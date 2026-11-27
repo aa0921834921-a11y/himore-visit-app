@@ -7,22 +7,29 @@ import {
   useAudioRecorder,
   useAudioRecorderState,
 } from 'expo-audio';
-import { Platform } from 'react-native';
-import { activateKeepAwakeAsync, deactivateKeepAwake } from 'expo-keep-awake';
 
 export type RecPhase = 'idle' | 'recording' | 'paused' | 'stopped';
 
-/** 錄音:開始、暫停、繼續、停止;錄音中保持螢幕不休眠,可在背景繼續錄(需原生版) */
-export function useRecorder() {
-  // 錄音頁保持螢幕不休眠(網頁版瀏覽器多半不支援,略過)
-  useEffect(() => {
-    if (Platform.OS === 'web') return;
-    activateKeepAwakeAsync('himore-recorder').catch(() => {});
-    return () => {
-      deactivateKeepAwake('himore-recorder').catch(() => {});
-    };
-  }, []);
-  const recorder = useAudioRecorder({ ...RecordingPresets.HIGH_QUALITY, isMeteringEnabled: true });
+/**
+ * 語音專用錄音設定:單聲道 22kHz、48kbps AAC。
+ * 語音辨識模型只用 16kHz 單聲道,高音質沒有幫助;這樣一小時約 21MB(原本約 58MB),
+ * 長時間拜訪也能透過通道上傳(單檔上限約 100MB ≒ 4 小時以上)。
+ */
+const SPEECH_PRESET = {
+  ...RecordingPresets.HIGH_QUALITY,
+  sampleRate: 22050,
+  numberOfChannels: 1,
+  bitRate: 48000,
+  web: { mimeType: 'audio/webm', bitsPerSecond: 48000 },
+  isMeteringEnabled: true,
+};
+
+/**
+ * 錄音:開始、暫停、繼續、停止。
+ * 不保持螢幕常亮(又熱又耗電):App 版關掉螢幕或切到其他 App 會以前景服務繼續錄,通知列顯示錄音中。
+ * 網頁版(尤其 iPhone Safari)螢幕關閉就會中斷,長時間拜訪請用手機內建錄音 App 錄好再匯入。
+ */
+export function useRecorder() {  const recorder = useAudioRecorder(SPEECH_PRESET);
   const state = useAudioRecorderState(recorder, 200);
   const [phase, setPhase] = useState<RecPhase>('idle');
   const [permission, setPermission] = useState<'unknown' | 'granted' | 'denied'>('unknown');

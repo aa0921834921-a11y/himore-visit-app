@@ -145,6 +145,10 @@ export interface RawContent {
   text?: string; // 文字輸入或口述自由補充的文字
   audioUri?: string; // 錄音或自由口述的錄音檔
   audioDurationMs?: number;
+  /** 自動分段錄音:每段一個檔案(中途當機時已存的段落不會遺失)。有值時以此為準,audioUri 為第一段 */
+  audioParts?: { uri: string; durationMs: number }[];
+  /** 從手機內建錄音 App 匯入的錄音檔 */
+  audioImported?: { name: string; size?: number };
   audioDeleted?: boolean;
   marks?: number[]; // 標記重點的秒數
   selfCheckedQuestionIds?: string[]; // 錄音中自評已談到的題目
@@ -257,6 +261,7 @@ export interface Visit {
   status: VisitStatus;
   upload: UploadState;
   stage: number; // 0 未開始、1 上傳、2 轉文字、3 整理、4 題庫比對、5 完成
+  stageNote?: string; // 本機 AI 伺服器回報的處理進度
   error?: string;
   raw: RawContent;
   ai?: AnalysisResult; // AI 草稿,確認前不得出現在客戶檔案
@@ -316,6 +321,8 @@ export interface Settings {
   notifyEnabled: boolean;
   uploadOnWifiOnly: boolean;
   integration?: IntegrationSettings;
+  /** 本機 AI 伺服器(POC):有填網址就改用真實 AI,沒填用模擬 AI。設定存在各自的裝置 */
+  aiServer?: { url: string; key: string; diarization: boolean };
   industryOptions?: string[]; // 產業別選項
   customerCategories?: string[]; // 客戶分類選項
 }

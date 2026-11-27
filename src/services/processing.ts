@@ -29,10 +29,14 @@ export async function runPipeline(visitId: string): Promise<void> {
     v = getState().visits.find((x) => x.id === visitId);
     if (!v) return;
     const s = getState();
+    const mock = ai.isMock;
+    const note = (m: string) => patchVisit(visitId, { stageNote: m });
     const segments = await ai.transcribe({
+      onProgress: note,
       source: v.source,
       audioUri: v.raw.audioUri,
       audioDurationMs: v.raw.audioDurationMs,
+      audioParts: v.raw.audioParts,
       text: v.raw.text,
       dictation: v.raw.dictation,
       questions: s.questions,
@@ -40,12 +44,13 @@ export async function runPipeline(visitId: string): Promise<void> {
       supplements: v.raw.supplements,
       attachments: v.raw.attachments,
     });
-    await sleep(v.source === 'text' ? 500 : 1600);
-    patchVisit(visitId, (x) => ({ ...x, raw: { ...x.raw, segments } }));
+    if (mock) await sleep(v.source === 'text' ? 500 : 1600);
+    patchVisit(visitId, (x) => ({ ...x, stageNote: undefined, raw: { ...x.raw, segments } }));
+    if (!segments.length) throw new Error('沒有轉出任何文字,請確認錄音有聲音或補充文字後重試');
 
     // 3 整理重點
     patchVisit(visitId, { stage: 3 });
-    await sleep(1100);
+    if (mock) await sleep(1100);
     if (getState().settings.simulateFailureNext) {
       updateSettings({ simulateFailureNext: false });
       patchVisit(visitId, { status: 'failed', error: '整理重點時發生錯誤' });
@@ -68,6 +73,7 @@ export async function runPipeline(visitId: string): Promise<void> {
       salesId: v.salesId,
       glossary: st.settings.glossary,
       visitAt: v.visitAt,
+      onProgress: note,
     });
     // 錄音中自評已談到的題目:若 AI 沒找到依據,標為「部分回覆」提醒業務補述
     const checked = new Set(v.raw.selfCheckedQuestionIds || []);
@@ -79,10 +85,11 @@ export async function runPipeline(visitId: string): Promise<void> {
       if (!d.status) return;
       result.answers = result.answers.map((a) => (a.questionId === d.questionId ? { ...a, status: d.status!, reason: d.reason, answer: '' } : a));
     });
-    await sleep(800);
+    if (mock) await sleep(800);
     patchVisit(visitId, (x) => ({
       ...x,
       stage: 5,
+      stageNote: undefined,
       status: 'pending_confirm',
       ai: result,
       customerId: x.customerId || result.suggestedCustomerId,
@@ -91,7 +98,7 @@ export async function runPipeline(visitId: string): Promise<void> {
       showToast('拜訪紀錄整理完成,請確認後入庫', 'success', { label: '前往確認', href: `/visit/${visitId}/confirm` }, 6000);
     }
   } catch (e) {
-    patchVisit(visitId, { status: 'failed', error: e instanceof Error ? e.message : '未知錯誤' });
+    patchVisit(visitId, { status: 'failed', stageNote: undefined, error: e instanceof Error ? e.message : '未知錯誤' });
     showToast('處理失敗,請重試。內容已保存在手機中。', 'error');
   } finally {
     running.delete(visitId);

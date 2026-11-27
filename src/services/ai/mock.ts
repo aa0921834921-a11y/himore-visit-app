@@ -54,13 +54,13 @@ function fallbackKeys(q: Question): RegExp | undefined {
   return new RegExp(Array.from(new Set(words)).join('|'));
 }
 
-interface Sentence {
+export interface Sentence {
   text: string;
   segId: string;
   questionId?: string;
 }
 
-function splitSentences(segments: Segment[]): Sentence[] {
+export function splitSentences(segments: Segment[]): Sentence[] {
   const out: Sentence[] = [];
   segments.forEach((sg) => {
     sg.text
@@ -112,7 +112,7 @@ function keyPoints(sents: Sentence[]): SummaryField {
   return { text: chosen.map((c) => c.text).join(';') + '。', sourceSegmentIds: Array.from(new Set(chosen.map((c) => c.segId))) };
 }
 
-function extractFacts(sents: Sentence[]): Fact[] {
+export function extractFacts(sents: Sentence[]): Fact[] {
   const facts: Fact[] = [];
   const seen = new Set<string>();
   const add = (kind: FactKind, text: string, segId: string) => {
@@ -134,7 +134,7 @@ function extractFacts(sents: Sentence[]): Fact[] {
   return facts.slice(0, 8);
 }
 
-function extractUncertainties(sents: Sentence[], segments: Segment[]): Uncertainty[] {
+export function extractUncertainties(sents: Sentence[], segments: Segment[]): Uncertainty[] {
   const out: Uncertainty[] = [];
   sents.forEach((s) => {
     const m = s.text.match(RE.bareSeries);
@@ -150,7 +150,7 @@ function extractUncertainties(sents: Sentence[], segments: Segment[]): Uncertain
   return out.slice(0, 3);
 }
 
-function shortName(c?: Customer) {
+export function shortName(c?: Customer) {
   return c ? c.name.replace(/(股份)?有限公司$/, '') : '客戶';
 }
 
@@ -290,7 +290,7 @@ function extractPurpose(sents: Sentence[]): string | undefined {
   return truncate(hit.text.replace(/^(業務[::])?(這次|本次|今天|今日)?(拜訪)?(的)?(主要)?(目的)?(是|想|為)?/, '').replace(/[。.]$/, ''), 40) || undefined;
 }
 
-function suggestCustomer(sents: Sentence[], customers: Customer[]): string | undefined {
+export function suggestCustomer(sents: Sentence[], customers: Customer[]): string | undefined {
   const all = sents.map((s) => s.text).join(' ');
   const hit = customers.find((c) => {
     const short = c.name.replace(/(股份)?有限公司$/, '').replace(/(塑膠|工業|精密|科技|模具)+$/, '');

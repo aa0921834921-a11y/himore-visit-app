@@ -43,3 +43,7 @@ yarn-error.*
 # 原生專案由 expo prebuild 自動產生,不需上傳
 /android
 /ios
+
+# 本機 AI 伺服器
+local-ai-server/.venv/
+__pycache__/

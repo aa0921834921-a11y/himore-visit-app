@@ -152,3 +152,9 @@ npm run lint            # 程式碼檢查
 | `.github/workflows/build-apk.yml` | 打包 Android APK(手動或推送版本標籤) |
 | `app.config.js` | 網頁版部署在子路徑(`/<專案名稱>/`)時的網址設定 |
 | `scripts/use-release-signing.js` | 有設定正式簽章時,打包改用正式簽章 |
+
+
+## 本機 AI 伺服器(POC)
+
+`local-ai-server/` 是可以在自己電腦(NVIDIA 顯示卡)執行的 AI 伺服器:Breeze ASR 語音轉文字 + Ollama 開源語言模型分析,全部免費、資料不出電腦。
+安裝與使用方式見 [local-ai-server/README.md](local-ai-server/README.md)。App 在「我的 → AI 伺服器」或後台「系統設定」填入網址與金鑰即可切換;沒填就使用模擬 AI。

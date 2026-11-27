@@ -1,4 +1,4 @@
-import React, { useMemo } from 'react';
+import React, { useMemo, useState } from 'react';
 import { Image, View } from 'react-native';
 import { router } from 'expo-router';
 import Constants from 'expo-constants';
@@ -13,6 +13,8 @@ import { logout, updateSettings, upsertUser } from '../../store/actions';
 import { audioUsageBytes, fmtBytes } from '../../services/files';
 import { resumeAll } from '../../services/processing';
 import { ai } from '../../services/ai';
+import { Sheet } from '../../components/Sheet';
+import { AiServerForm } from '../../components/AiServerForm';
 
 // S18 我的與設定(文案 T-S18-01~T-S18-11)
 export default function Me() {
@@ -20,6 +22,7 @@ export default function Me() {
   const online = useOnline();
   const me = currentUser(s);
   const visitCount = s.visits.length;
+  const [aiOpen, setAiOpen] = useState(false);
   // eslint-disable-next-line react-hooks/exhaustive-deps
   const usage = useMemo(() => audioUsageBytes(), [visitCount]);
   if (!me) return null;
@@ -109,6 +112,11 @@ export default function Me() {
         }
       />
       <ListRow title={`儲存空間:已使用 ${fmtBytes(usage)}`} sub={`錄音保存 ${s.settings.retentionDays} 天後自動刪除`} left={<Icon name="folder" size={20} color={C.text2} />} right={null} />
+
+      <ListRow title="AI 伺服器" sub={ai.isMock ? '目前使用模擬 AI(示範用)' : ai.name} left={<Icon name="ai" size={20} color={ai.isMock ? C.text2 : C.teal} />} onPress={() => setAiOpen(true)} />
+      <Sheet visible={aiOpen} onClose={() => setAiOpen(false)} title="AI 伺服器設定">
+        <AiServerForm onSaved={() => setAiOpen(false)} />
+      </Sheet>
 
       <SectionTitle title="其他" />
       <ListRow

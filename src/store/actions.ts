@@ -104,12 +104,13 @@ export function discardDraft(id: string) {
   }));
 }
 
-export function recordConsent(visitId: string) {
+export function recordConsent(visitId: string, external = false) {
   const s = getState();
+  const text = external ? `【外部錄音匯入】業務確認錄音前已依下列聲明取得客戶同意。\n${s.settings.consentText}` : s.settings.consentText;
   patchRaw(visitId, {
-    consent: { at: nowIso(), byUserId: s.sessionUserId || '', version: s.settings.consentVersion, text: s.settings.consentText },
+    consent: { at: nowIso(), byUserId: s.sessionUserId || '', version: s.settings.consentVersion, text },
   });
-  audit('consent', `取得錄音同意(${s.settings.consentVersion})`, { visitId });
+  audit('consent', `${external ? '匯入錄音,確認已取得同意' : '取得錄音同意'}(${s.settings.consentVersion})`, { visitId });
 }
 
 /** 收集完成:轉為處理中,交給處理流程 */

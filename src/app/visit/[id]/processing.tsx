@@ -65,9 +65,16 @@ export default function Processing() {
           return (
             <View key={st.n} style={[styles.stage, i > 0 && styles.stageBorder]}>
               <Image source={isDone ? STATE.done : isActive ? STATE.active : STATE.waiting} style={{ width: 28, height: 28, opacity: isFailed ? 0.5 : 1 }} />
-              <Txt style={{ flex: 1, marginLeft: SP.md }} weight={isActive ? '700' : '500'} color={isFailed ? '#FF6B66' : isDone || isActive ? C.text : C.text3}>
-                {label}
-              </Txt>
+              <View style={{ flex: 1, marginLeft: SP.md }}>
+                <Txt weight={isActive ? '700' : '500'} color={isFailed ? '#FF6B66' : isDone || isActive ? C.text : C.text3}>
+                  {label}
+                </Txt>
+                {isActive && v.stageNote ? (
+                  <Txt size={T.small} color={C.teal}>
+                    {v.stageNote}
+                  </Txt>
+                ) : null}
+              </View>
               {isActive ? <Icon name="spinner" size={18} color={C.teal} /> : null}
             </View>
           );

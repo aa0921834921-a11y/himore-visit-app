@@ -11,6 +11,7 @@ import { updateSettings } from '../../store/actions';
 import { ai } from '../../services/ai';
 import { IntegrationPanel } from '../../components/IntegrationPanel';
 import { CustomerOptionsPanel } from '../../components/OptionsPanel';
+import { AiServerForm } from '../../components/AiServerForm';
 import { fmtDateTime } from '../../lib/util';
 import type { AuditType } from '../../types';
 
@@ -107,9 +108,11 @@ export default function AdminSettings() {
               <Txt size={T.small} color={C.text2}>
                 目前使用:{ai.name}
               </Txt>
-              <Txt size={T.tiny + 1} color={C.text3} style={{ marginBottom: SP.sm }}>
-                正式導入時改接哈鏌選定的 AI 服務(語音轉文字+整理)。
+              <Txt size={T.tiny + 1} color={C.text3} style={{ marginBottom: SP.md }}>
+                POC 可接本機 AI 伺服器(免費開源模型,資料不出這台電腦);正式導入時改接哈鏌選定的 AI 服務。
               </Txt>
+              <AiServerForm />
+              <View style={{ height: SP.lg }} />
               <Checkbox checked={st.aiTermsConfirmed} onPress={() => updateSettings({ aiTermsConfirmed: !st.aiTermsConfirmed })} label="已確認 AI 服務的資料使用條款允許處理客戶拜訪內容" />
               <Field label="試用帳號上限" value={cap} onChangeText={setCap} keyboardType="number-pad" style={{ marginTop: SP.md }} />
               <Button

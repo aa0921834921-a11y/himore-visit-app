@@ -1,12 +1,32 @@
 @echo off
-chcp 65001 >nul
 cd /d "%~dp0"
 call config.bat
+set CF=
+for %%P in (cloudflared.exe) do if not "%%~$PATH:P"=="" set "CF=%%~$PATH:P"
+if "%CF%"=="" if exist "%ProgramFiles(x86)%\cloudflared\cloudflared.exe" set "CF=%ProgramFiles(x86)%\cloudflared\cloudflared.exe"
+if "%CF%"=="" if exist "%ProgramFiles%\cloudflared\cloudflared.exe" set "CF=%ProgramFiles%\cloudflared\cloudflared.exe"
+if "%CF%"=="" if exist "%LOCALAPPDATA%\Microsoft\WinGet\Links\cloudflared.exe" set "CF=%LOCALAPPDATA%\Microsoft\WinGet\Links\cloudflared.exe"
+if "%CF%"=="" if exist "%~dp0cloudflared.exe" set "CF=%~dp0cloudflared.exe"
+if "%CF%"=="" (
+  echo cloudflared not found. Installing with winget...
+  winget install -e --id Cloudflare.cloudflared --accept-package-agreements --accept-source-agreements
+  if exist "%ProgramFiles(x86)%\cloudflared\cloudflared.exe" set "CF=%ProgramFiles(x86)%\cloudflared\cloudflared.exe"
+  if exist "%ProgramFiles%\cloudflared\cloudflared.exe" set "CF=%ProgramFiles%\cloudflared\cloudflared.exe"
+)
+if "%CF%"=="" (
+  echo.
+  echo cloudflared still not found.
+  echo Download cloudflared-windows-amd64.exe from
+  echo   https://github.com/cloudflare/cloudflared/releases/latest
+  echo rename it to cloudflared.exe and put it in this folder, then run tunnel.bat again.
+  pause
+  exit /b 1
+)
 echo.
-echo 啟動 Cloudflare 臨時通道。等一下畫面會出現一行
+echo Starting Cloudflare quick tunnel. Look for a line like:
 echo     https://xxxx-xxxx.trycloudflare.com
-echo 把這個網址填到 App 的「AI 伺服器設定」。
-echo 注意:每次重新執行網址都會不同;關掉這個視窗手機就連不到。
+echo Enter that address in the App (AI server settings).
+echo NOTE: the address changes every time. Closing this window disconnects the App.
 echo.
-cloudflared tunnel --url http://localhost:%PORT%
+"%CF%" tunnel --url http://localhost:%PORT%
 pause

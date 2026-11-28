@@ -23,8 +23,8 @@ import { useAppState } from "../../store/store";
 import {
   customerById,
   questionById,
-  setById,
   visitById,
+  visitQuestionItems,
 } from "../../store/selectors";
 import { discardDraft, patchRaw } from "../../store/actions";
 import { useRecorder } from "../../services/recorder";
@@ -93,7 +93,7 @@ export default function Recording() {
 
   if (!v) return null;
   const c = customerById(s, v.customerId);
-  const set = setById(s, v.questionSetId);
+  const qItems = visitQuestionItems(s, v);
 
   const finish = async () => {
     setSaving(true);
@@ -265,14 +265,14 @@ export default function Recording() {
         錄音完成後才會轉成文字。錄音中可以關掉螢幕省電(App 版)
       </Txt>
 
-      {set ? (
+      {qItems.length ? (
         <Card>
           <Pressable
             onPress={() => setShowQs(!showQs)}
             style={{ flexDirection: "row", alignItems: "center" }}
           >
             <Txt weight="700" style={{ flex: 1 }}>
-              題庫自評:已談到的題目({checked.length}/{set.items.length})
+              題庫自評:已談到的題目({checked.length}/{qItems.length})
             </Txt>
             <Icon
               name="down"
@@ -282,7 +282,7 @@ export default function Recording() {
             />
           </Pressable>
           {showQs
-            ? set.items.map((it) => {
+            ? qItems.map((it) => {
                 const q = questionById(s, it.questionId);
                 const on = checked.includes(it.questionId);
                 return (
@@ -297,7 +297,7 @@ export default function Recording() {
                       )
                     }
                     label={`${q?.code} ${q?.text}`}
-                    sub={it.required ? "必答" : "選答"}
+                    sub={it.tracked ? "追蹤:上次未取得" : it.required ? "必答" : "選答"}
                   />
                 );
               })

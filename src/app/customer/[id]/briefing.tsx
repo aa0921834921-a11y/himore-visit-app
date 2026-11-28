@@ -5,7 +5,7 @@ import { Header, Screen } from '../../../components/Screen';
 import { Button, Card, Chip, FactChip, Icon, KeyValue, Notice, Row, Txt } from '../../../components/ui';
 import { C, SP, T } from '../../../theme';
 import { useAppState } from '../../../store/store';
-import { avoidItems, customerById, knownAndPending, lastConfirmedVisit, openTodosOfCustomer, questionById, industriesOf, scheduleById, setById, suggestedSetId, userById } from '../../../store/selectors';
+import { avoidItems, customerById, knownAndPending, lastConfirmedVisit, openTodosOfCustomer, questionById, industriesOf, pendingFollowups, scheduleById, setById, suggestedSetId, userById } from '../../../store/selectors';
 import { audit } from '../../../store/actions';
 import { fmtDate } from '../../../lib/util';
 
@@ -29,6 +29,7 @@ export default function Briefing() {
   const avoid = avoidItems(s, c.id);
   const todos = openTodosOfCustomer(s, c.id);
   const kp = knownAndPending(s, c.id, set?.id);
+  const follow = pendingFollowups(s, c.id);
   const facts = last?.ai?.facts.filter((f) => f.kind !== 'commitment') || [];
 
   const start = () =>
@@ -143,6 +144,26 @@ export default function Briefing() {
             </Txt>
             {todos.length ? <Txt>{todos.map((t) => t.content).join(';')}。</Txt> : <Txt color={C.text3}>沒有未完成的承諾</Txt>}
           </Card>
+          {follow.length ? (
+            <Card tone="warn" style={{ marginBottom: SP.md }}>
+              <Txt size={T.small} weight="700" color={C.yellow} style={{ marginBottom: 4 }}>
+                待補問(上次未問到或只取得部分,本次自動帶入)
+              </Txt>
+              {follow.map((f) => (
+                <View key={f.questionId} style={{ paddingVertical: 6 }}>
+                  <Txt size={T.small} weight="600">
+                    {f.question?.code} {f.question?.text}
+                  </Txt>
+                  <Txt size={T.small} color={C.text2}>
+                    {f.status === 'partial' ? `已知:${f.answer || '—'}|請補問:${f.missing || '其餘資訊'}` : '上次未問到'}
+                  </Txt>
+                </View>
+              ))}
+              <Txt size={T.tiny + 1} color={C.text3} style={{ marginTop: 4 }}>
+                已取得的題目不再重複問;客戶拒答或不適用,在確認頁標「客戶未提供/不適用」即暫停追蹤。
+              </Txt>
+            </Card>
+          ) : null}
           <Card tone="accent" style={{ marginBottom: SP.md }}>
             <Pressable onPress={() => setShowKnown(!showKnown)} style={{ flexDirection: 'row', alignItems: 'center' }}>
               <View style={{ flex: 1 }}>

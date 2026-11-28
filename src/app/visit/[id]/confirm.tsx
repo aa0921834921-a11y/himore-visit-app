@@ -10,7 +10,6 @@ import {
   FactChip,
   Field,
   Icon,
-  IconButton,
   Notice,
   Row,
   Segmented,
@@ -18,13 +17,12 @@ import {
 } from "../../../components/ui";
 import { Ring } from "../../../components/Ring";
 import { CustomerPicker, ReasonSheet } from "../../../components/Pickers";
-import { SourceSheet } from "../../../components/SourceSheet";
+import { SegmentList, SourceSheet } from "../../../components/SourceSheet";
 import { PrefSheet } from "../../../components/PrefSheet";
 import { Sheet } from "../../../components/Sheet";
 import { promptDialog } from "../../../components/Dialog";
 import { AttachmentList } from "../../../components/Attachments";
-import { OutOfScope } from "../../../components/Report";
-import { buildVisitReport } from "../../../services/report";
+import { CategoryList, ProfileUpdatesCard, VisitKindCard } from "../../../components/VisitInsights";
 import { C, R, SP, T } from "../../../theme";
 import { useAppState } from "../../../store/store";
 import {
@@ -51,27 +49,19 @@ import {
 import type {
   AnalysisResult,
   AnswerItem,
-  SummaryKey,
   TodoSuggestion,
   Visit,
 } from "../../../types";
 
 // S09 確認與編輯:單頁快速確認(T-S09-01~T-S09-14)。預設只顯示需要人處理的例外。
 
-const SUMMARY: { key: SummaryKey; title: string }[] = [
-  { key: "keyPoints", title: "拜訪摘要" },
-  { key: "needs", title: "客戶需求" },
-  { key: "competitors", title: "競品" },
-  { key: "objections", title: "異議" },
-  { key: "nextSteps", title: "下一步" },
-];
 const SRC = {
   recording: "現場錄音",
   dictation: "業務口述",
   text: "文字輸入",
 } as const;
 
-type Tab = "summary" | "bank" | "todo" | "pref";
+type Tab = "summary" | "bank" | "transcript";
 
 export default function Confirm() {
   const { id } = useLocalSearchParams<{ id: string }>();
@@ -85,8 +75,6 @@ export default function Confirm() {
     factId?: string;
     uncId?: string;
   } | null>(null);
-  const [editKey, setEditKey] = useState<SummaryKey | null>(null);
-  const [draft, setDraft] = useState("");
   const [answerQ, setAnswerQ] = useState<AnswerItem | null>(null);
   const [answerDraft, setAnswerDraft] = useState("");
   const [reasonFor, setReasonFor] = useState<string | null>(null);
@@ -374,24 +362,20 @@ export default function Confirm() {
           {
             value: "summary",
             label: "摘要",
-            badge: unviewed.length + unresolved.length || undefined,
+            badge: unviewed.length + unresolved.length + pendingPrefs.length || undefined,
           },
           {
             value: "bank",
-            label: "題庫",
+            label: "題庫回覆",
             badge: prog.unhandled.length || undefined,
           },
-          { value: "todo", label: "待辦" },
-          {
-            value: "pref",
-            label: "偏好",
-            badge: pendingPrefs.length || undefined,
-          },
+          { value: "transcript", label: "逐字稿" },
         ]}
       />
 
       {tab === "summary" ? (
         <>
+          <VisitKindCard v={v} editable={editable} update={(fn) => upd(fn, false)} />
           {a.facts.length ? (
             <Card tone="warn" style={{ marginBottom: SP.md }}>
               <Txt
@@ -433,99 +417,21 @@ export default function Confirm() {
               <Notice tone="red" icon="warn" text={`AI 不確定:${u.text}`} />
             </Pressable>
           ))}
-          <Card style={{ marginBottom: SP.md }}>
-            <Txt
-              size={T.small}
-              weight="700"
-              color={C.teal}
-              style={{ marginBottom: 4 }}
-            >
-              題庫之外的內容
-            </Txt>
-            <OutOfScope r={buildVisitReport(s, v)} />
-          </Card>
-          {SUMMARY.map(({ key, title }) => {
-            const f = a.summary[key];
-            const unknown = f.text === "未知";
-            return (
-              <Card key={key} style={{ marginBottom: SP.md }}>
-                <Row
-                  style={{ justifyContent: "space-between", marginBottom: 4 }}
-                >
-                  <Txt size={T.small} weight="700" color={C.teal}>
-                    {title}
-                  </Txt>
-                  <Row gap={0}>
-                    <IconButton
-                      name="folder"
-                      size={18}
-                      color={C.text2}
-                      label="查看原文"
-                      onPress={() =>
-                        setSource({
-                          ids: f.sourceSegmentIds,
-                          title: `原文:${title}`,
-                        })
-                      }
-                    />
-                    {editable ? (
-                      <IconButton
-                        name="edit"
-                        size={18}
-                        color={C.text2}
-                        label="編輯"
-                        onPress={() => {
-                          setEditKey(key);
-                          setDraft(unknown ? "" : f.text);
-                        }}
-                      />
-                    ) : null}
-                  </Row>
-                </Row>
-                {editKey === key ? (
-                  <>
-                    <Field
-                      value={draft}
-                      onChangeText={setDraft}
-                      multiline
-                      autoFocus
-                    />
-                    <Row gap={SP.md}>
-                      <View style={{ flex: 1 }}>
-                        <Button
-                          title="取消"
-                          variant="secondary"
-                          small
-                          onPress={() => setEditKey(null)}
-                        />
-                      </View>
-                      <View style={{ flex: 1 }}>
-                        <Button
-                          title="儲存"
-                          small
-                          onPress={() => {
-                            upd((x) => ({
-                              ...x,
-                              summary: {
-                                ...x.summary,
-                                [key]: {
-                                  ...x.summary[key],
-                                  text: draft.trim() || "未知",
-                                },
-                              },
-                            }));
-                            setEditKey(null);
-                          }}
-                        />
-                      </View>
-                    </Row>
-                  </>
-                ) : (
-                  <Txt color={unknown ? C.text3 : C.text}>{f.text}</Txt>
-                )}
-              </Card>
-            );
-          })}
+          <ProfileUpdatesCard
+            v={v}
+            editable={editable}
+            update={(fn) => upd(fn, false)}
+            onSource={(ids, title) => setSource({ ids, title })}
+          />
+          <Txt size={T.small} weight="700" color={C.text2} style={{ marginBottom: SP.sm }}>
+            拜訪摘要|七大資訊分類
+          </Txt>
+          <CategoryList
+            v={v}
+            editable={editable}
+            update={(fn) => upd(fn)}
+            onSource={(ids, title) => setSource({ ids, title })}
+          />
         </>
       ) : null}
 
@@ -576,10 +482,13 @@ export default function Confirm() {
         )
       ) : null}
 
-      {tab === "todo" ? (
+      {tab === "summary" ? (
         <>
+          <Txt size={T.small} weight="700" color={C.text2} style={{ marginTop: SP.md, marginBottom: 4 }}>
+            待辦事項
+          </Txt>
           <Txt size={T.small} color={C.text2} style={{ marginBottom: SP.sm }}>
-            待辦建議:勾選要保留的項目。沒有明確日期就留空,不猜。
+            勾選要保留的項目,入庫後成為待辦。沒有明確日期就留空,不猜。
           </Txt>
           {a.todos.length === 0 ? (
             <Notice
@@ -659,8 +568,11 @@ export default function Confirm() {
         </>
       ) : null}
 
-      {tab === "pref" ? (
+      {tab === "summary" ? (
         <>
+          <Txt size={T.small} weight="700" color={C.text2} style={{ marginTop: SP.lg, marginBottom: SP.sm }}>
+            偏好與避免事項
+          </Txt>
           {a.prefs.length === 0 ? (
             <Notice tone="gray" icon="star" text="沒有偵測到偏好與避免事項。" />
           ) : (
@@ -735,6 +647,15 @@ export default function Confirm() {
               </Txt>
             </>
           )}
+        </>
+      ) : null}
+
+      {tab === "transcript" ? (
+        <>
+          <Txt size={T.small} color={C.text2} style={{ marginBottom: SP.sm }}>
+            完整逐字稿(含補充口述與附件抽出的文字)。
+          </Txt>
+          <SegmentList visit={v} />
         </>
       ) : null}
 
@@ -940,7 +861,7 @@ function AnswerRow({
       <Row style={{ justifyContent: "space-between", marginBottom: 4 }}>
         <Txt size={T.small} weight="700" color={red ? "#FF6B66" : C.text2}>
           {q?.code}
-          {item.required ? "・必答" : "・選答"}
+          {item.tracked ? "・追蹤" : item.required ? "・必答" : "・選答"}
         </Txt>
         <Chip
           label={
@@ -962,11 +883,22 @@ function AnswerRow({
         />
       </Row>
       <Txt weight="600">{q?.text}</Txt>
+      {q?.hint ? (
+        <Txt size={T.tiny + 1} color={C.text3} style={{ marginTop: 2 }}>
+          希望帶回:{q.hint}
+        </Txt>
+      ) : null}
       {item.answer ? (
         <Txt size={T.small} color={C.text2} style={{ marginTop: 4 }}>
           {item.answer}
         </Txt>
-      ) : red ? (
+      ) : null}
+      {item.status === "partial" && item.missing ? (
+        <Txt size={T.small} color={C.yellow} style={{ marginTop: 4 }}>
+          尚缺:{item.missing}(下次拜訪會自動提示補問)
+        </Txt>
+      ) : null}
+      {item.answer ? null : red ? (
         <Txt size={T.small} color={C.text3} style={{ marginTop: 4 }}>
           點此補一段口述或文字,或標「客戶未提供/不適用」並選原因
         </Txt>

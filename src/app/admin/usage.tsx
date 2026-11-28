@@ -6,7 +6,9 @@ import { Sheet } from '../../components/Sheet';
 import { alertDialog } from '../../components/Dialog';
 import { C, SP, T } from '../../theme';
 import { useAppState } from '../../store/store';
-import { coverage, perQuestion, perSales, prefStats, visitsInDays } from '../../store/metrics';
+import { coverage, perQuestion, perSales, perSalesKind, prefStats, visitsInDays } from '../../store/metrics';
+import { customerById, purposeOf, visitKindOf } from '../../store/selectors';
+import { router } from 'expo-router';
 import { upsertUser } from '../../store/actions';
 import { fmtDate, fmtHours, pct } from '../../lib/util';
 import type { Role, User } from '../../types';
@@ -24,6 +26,9 @@ export default function AdminUsage() {
   const rows = perSales(s, vs);
   const qrows = perQuestion(s, vs);
   const ps = prefStats(s, vs);
+  const kinds = perSalesKind(s, vs);
+  const [kindUser, setKindUser] = useState<string | null>(null);
+  const kindRow = kinds.find((k) => k.user.id === kindUser);
   const total = rows.reduce((a, r) => a + r.count, 0);
   const totalConfirmed = rows.reduce((a, r) => a + r.confirmed, 0);
   const sales = s.users.filter((u) => u.role === 'sales');
@@ -71,6 +76,59 @@ export default function AdminUsage() {
         <StatCard label="偏好與避免事項接受率" value={pct(ps.accepted, ps.suggested)} sub={`AI 建議 ${ps.suggested} 項`} tone="yellow" />
         <StatCard label="拜訪前簡報瀏覽" value={`${ps.briefingViews} 次`} sub="判斷是否真的有看" />
       </View>
+
+      <Panel title="拜訪成效:有效拜訪與一般拜訪">
+        <Txt size={T.small} color={C.text2} style={{ marginBottom: SP.sm }}>
+          有具體拜訪資訊(需求、設備、決策、競品、考量、後續行動)為有效拜訪;只有未遇窗口、對方無暇、暫無新資訊等為一般拜訪。一般拜訪也完整保留,作為日後分析客戶的依據。點一列看明細。
+        </Txt>
+        <AdminTable
+          rows={kinds}
+          keyOf={(r) => r.user.id}
+          onRowPress={(r) => setKindUser(r.user.id)}
+          minWidth={560}
+          cols={[
+            { key: 'u', title: '業務', render: (r) => r.user.name },
+            { key: 't', title: '已入庫拜訪', width: 96, render: (r) => `${r.total} 筆` },
+            { key: 'e', title: '有效拜訪', width: 90, render: (r) => <Txt size={T.small} weight="700" color={C.teal}>{r.effective} 筆</Txt> },
+            { key: 'g', title: '一般拜訪', width: 90, render: (r) => <Txt size={T.small} weight="700" color={r.general ? C.yellow : C.text3}>{r.general} 筆</Txt> },
+            { key: 'p', title: '有效比例', width: 84, render: (r) => pct(r.effective, r.total) },
+            { key: 'r', title: '一般拜訪原因', render: (r) => Array.from(r.reasons.entries()).map(([k, n]) => `${k} ${n}`).join('、') || '—' },
+          ]}
+        />
+      </Panel>
+
+      <Sheet visible={!!kindRow} onClose={() => setKindUser(null)} title={kindRow ? `${kindRow.user.name}:拜訪明細(近 ${days} 天)` : ''}>
+        {kindRow?.visits.length ? (
+          kindRow.visits.map((v) => {
+            const k = visitKindOf(v);
+            return (
+              <Row key={v.id} style={{ paddingVertical: SP.sm, borderBottomWidth: 1, borderBottomColor: C.lineSoft, alignItems: 'flex-start' }} gap={SP.sm}>
+                <Chip label={k === 'effective' ? '有效' : '一般'} tone={k === 'effective' ? 'teal' : 'yellow'} />
+                <View style={{ flex: 1 }}>
+                  <Txt size={T.small} weight="600">
+                    {fmtDate(v.visitAt)} {customerById(s, v.customerId)?.name || '未指定客戶'}
+                  </Txt>
+                  <Txt size={T.small} color={C.text2}>
+                    {k === 'general' ? (v.ai?.generalNotes || []).join('、') || '其他接洽情況' : purposeOf(v, s) || v.ai?.summary.keyPoints.text}
+                  </Txt>
+                </View>
+                <Button
+                  title="報告"
+                  small
+                  full={false}
+                  variant="ghost"
+                  onPress={() => {
+                    setKindUser(null);
+                    router.push(`/admin/review/${v.id}`);
+                  }}
+                />
+              </Row>
+            );
+          })
+        ) : (
+          <Txt color={C.text3}>這段期間沒有已入庫的拜訪</Txt>
+        )}
+      </Sheet>
 
       <View style={{ flexDirection: wide ? 'row' : 'column', gap: SP.lg, alignItems: 'flex-start' }}>
         <Panel title="分業務" style={wide ? { flex: 1 } : { alignSelf: 'stretch' }}>

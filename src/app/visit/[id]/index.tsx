@@ -16,8 +16,7 @@ import {
 } from "../../../components/ui";
 import { SegmentList } from "../../../components/SourceSheet";
 import { AttachmentList } from "../../../components/Attachments";
-import { OutOfScope } from "../../../components/Report";
-import { buildVisitReport } from "../../../services/report";
+import { CategoryList, VisitKindCard } from "../../../components/VisitInsights";
 import { C, SP, T } from "../../../theme";
 import { showToast, useAppState } from "../../../store/store";
 import {
@@ -44,14 +43,6 @@ const SRC = {
   dictation: "業務口述",
   text: "文字輸入",
 } as const;
-const SUMMARY = [
-  ["keyPoints", "拜訪摘要"],
-  ["needs", "客戶需求"],
-  ["competitors", "競品"],
-  ["objections", "異議"],
-  ["nextSteps", "下一步"],
-] as const;
-
 // 拜訪詳情:已確認摘要、題庫回覆、逐字稿與錄音回放(放在 S14 拜訪紀錄下)
 export default function VisitDetail() {
   const { id } = useLocalSearchParams<{ id: string }>();
@@ -142,20 +133,8 @@ export default function VisitDetail() {
               ))}
             </View>
           ) : null}
-          {SUMMARY.map(([k, title]) => (
-            <Card key={k} style={{ marginBottom: SP.sm }}>
-              <Txt size={T.small} weight="700" color={C.teal}>
-                {title}
-              </Txt>
-              <Txt color={a.summary[k].text === "未知" ? C.text3 : C.text}>
-                {a.summary[k].text}
-              </Txt>
-            </Card>
-          ))}
-          <SectionTitle title="題庫之外的內容" />
-          <Card style={{ marginBottom: SP.sm }}>
-            <OutOfScope r={buildVisitReport(s, v)} compact />
-          </Card>
+          <VisitKindCard v={v} editable={false} />
+          <CategoryList v={v} editable={false} compact />
           {v.raw.supplements?.length || v.raw.attachments?.length ? (
             <>
               <SectionTitle title="附件與補充" />

@@ -6,7 +6,7 @@ import { Button, Checkbox, Chip, Field, Notice, Row, Segmented, Txt } from '../.
 import { CustomerPicker } from '../../components/Pickers';
 import { C, SP, T } from '../../theme';
 import { showToast, useAppState } from '../../store/store';
-import { customerById, salesUsers, userById } from '../../store/selectors';
+import { customerById, salesUsers, userById, visitKindOf } from '../../store/selectors';
 import { audit } from '../../store/actions';
 import { buildVisitsCsv, saveCsv, VISIT_STATUS_LABEL } from '../../services/export';
 import { fmtShortDate, ymd } from '../../lib/util';
@@ -23,6 +23,7 @@ export default function AdminVisits() {
   const [to, setTo] = useState(ymd(new Date(now.getFullYear(), now.getMonth() + 1, 0)));
   const [status, setStatus] = useState<'all' | 'processing' | 'pending_confirm' | 'confirmed'>('all');
   const [restricted, setRestricted] = useState(false);
+  const [kind, setKind] = useState<'all' | 'effective' | 'general'>('all');
   const [pick, setPick] = useState(false);
   const [page, setPage] = useState(1);
 
@@ -36,9 +37,10 @@ export default function AdminVisits() {
           const d = ymd(new Date(v.visitAt));
           return (!from || d >= from) && (!to || d <= to);
         })
+        .filter((v) => kind === 'all' || (v.ai && visitKindOf(v) === kind))
         .filter((v) => status === 'all' || (status === 'processing' ? v.status === 'processing' || v.status === 'failed' : v.status === status))
         .sort((a, b) => b.visitAt.localeCompare(a.visitAt)),
-    [s.visits, sales, customerId, from, to, status],
+    [s.visits, sales, customerId, from, to, status, kind],
   );
   const pages = Math.max(1, Math.ceil(list.length / PAGE));
   const month = ymd().slice(0, 7);
@@ -91,6 +93,19 @@ export default function AdminVisits() {
           ]}
           style={{ maxWidth: 480 }}
         />
+        <Segmented
+          value={kind}
+          onChange={(v) => {
+            setKind(v);
+            setPage(1);
+          }}
+          options={[
+            { value: 'all', label: '全部拜訪' },
+            { value: 'effective', label: '有效拜訪' },
+            { value: 'general', label: '一般拜訪' },
+          ]}
+          style={{ maxWidth: 360, marginTop: SP.sm }}
+        />
       </Panel>
 
       <AdminTable
@@ -102,6 +117,7 @@ export default function AdminVisits() {
           { key: 'c', title: '客戶', render: (r) => customerById(s, r.customerId)?.name || '未指定' },
           { key: 'u', title: '業務', width: 90, render: (r) => userById(s, r.salesId)?.name || '—' },
           { key: 'd', title: '日期', width: 80, render: (r) => fmtShortDate(r.visitAt) },
+          { key: 'k', title: '類別', width: 70, render: (r) => (r.ai ? <Chip label={visitKindOf(r) === 'effective' ? '有效' : '一般'} tone={visitKindOf(r) === 'effective' ? 'teal' : 'yellow'} /> : '—') },
           { key: 's', title: '狀態', width: 110, render: (r) => <Chip label={VISIT_STATUS_LABEL[r.status]} tone={r.status === 'confirmed' ? 'teal' : r.status === 'failed' ? 'red' : 'yellow'} /> },
           {
             key: 'm',
@@ -128,7 +144,7 @@ export default function AdminVisits() {
 
       <Panel style={{ marginTop: SP.lg }} title="CSV 匯出說明">
         <Txt size={T.small} color={C.text2} style={{ marginBottom: SP.sm }}>
-          CSV 欄位:客戶(編號、名稱、統編、分類、產業別)+拜訪互動(拜訪日期、拜訪人員、類型、目的、需求、追蹤事項)+題目與回覆、摘要、偏好與避免事項、補充內容、附件、確認時間。檔案為 UTF-8,可直接用 Excel 開啟。
+          CSV 欄位:客戶(編號、名稱、統編、狀態、所屬產業)+拜訪互動(日期、人員、類型、有效/一般拜訪、目的、需求、追蹤事項)+題目與回覆+七大資訊分類各一欄+客戶資料更新、偏好與避免事項、補充內容、附件、確認時間。檔案為 UTF-8,可直接用 Excel 開啟。
         </Txt>
         <Checkbox checked={restricted} onPress={() => setRestricted(!restricted)} label="包含「限定」敏感度的偏好與避免事項" sub="標為「限定」敏感度的偏好與避免事項,預設不匯出" />
         <Notice tone="gray" icon="sync" text="對外串接(Webhook / API):請到「系統設定 → 對外串接」設定;目前為預留,只排入佇列不實際送出。" />

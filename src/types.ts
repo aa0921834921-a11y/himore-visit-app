@@ -23,8 +23,28 @@ export interface Contact {
   department?: string; // 部門
   phone?: string;
   email?: string;
-  decisionRole?: DecisionRole;
-  preference?: string; // 聯絡人偏好(聯絡方式、溝通風格等,手動填寫;AI 抓到的偏好另存於偏好與避免事項)
+  decisionRole?: string; // 角色(選項由後台維護,例:決策者、採購窗口)
+  note?: string; // 備註
+  preference?: string; // 舊版欄位,顯示時併入備註
+}
+
+/** 射出機(工廠資訊,可多筆) */
+export interface Machine {
+  id: string;
+  brand?: string;
+  tonnage?: string; // 例:350
+  qty?: number;
+  note?: string;
+}
+
+export type AutomationLevel = '傳統人工' | '半自動化' | '全自動化';
+
+/** 欄位來源:由拜訪取得並經業務確認寫入 */
+export interface FieldSource {
+  visitId?: string;
+  at: string;
+  by: string;
+  quote?: string;
 }
 
 export interface Customer {
@@ -32,10 +52,22 @@ export interface Customer {
   code: string; // 例:C100328
   name: string;
   taxId?: string; // 統一編號
-  address?: string;
+  principal?: string; // 公司負責人
+  phone?: string; // 公司電話(區碼-電話號碼)
+  addr?: { city?: string; district?: string; street?: string }; // 地址:縣市/區域/街道門號
+  address?: string; // 舊版單一地址欄位
   website?: string;
-  category?: string; // 客戶分類(選項由後台系統設定維護)
-  industries?: string[]; // 產業別(複選)
+  category?: string; // 客戶狀態(潛在、新、既有、重點…)
+  customerTypes?: string[]; // 客戶類型(直接客戶、經銷商…)
+  industries?: string[]; // 所屬產業(複選)
+  products?: string[]; // 射出產品(複選,選項由後台建檔)
+  identities?: string[]; // 客戶身分(品牌廠、代工廠…)
+  moldInjection?: string[]; // 模具與射出(自有模具、射出外包…)
+  markets?: string[]; // 產品應用市場
+  employeeScale?: string; // 員工規模
+  machines?: Machine[]; // 射出機清單
+  automation?: { level?: AutomationLevel; processes: string[]; other?: string };
+  fieldSources?: Record<string, FieldSource>; // 由拜訪確認寫入的欄位來源
   industry?: string; // 舊版單一產業欄位,僅相容舊資料
   mainProducts?: string;
   mainEquipment?: string;
@@ -51,6 +83,7 @@ export interface Question {
   id: string;
   code: string; // Q1、Q2…
   text: string;
+  hint?: string; // 希望帶回的資訊
   category: string;
   active: boolean;
 }
@@ -58,6 +91,7 @@ export interface Question {
 export interface QuestionSetItem {
   questionId: string;
   required: boolean;
+  tracked?: boolean; // 前次拜訪未取得/部分取得,自動帶入追蹤
 }
 
 export interface QuestionSet {
@@ -164,9 +198,11 @@ export type AnswerStatus = 'answered' | 'partial' | 'uncovered' | 'not_provided'
 export interface AnswerItem {
   questionId: string;
   required: boolean;
+  tracked?: boolean; // 自動帶入的追蹤題
   status: AnswerStatus;
   answer: string;
   reason?: string;
+  missing?: string; // 部分取得時:還缺哪些資訊(下次拜訪自動提示補問)
   sourceSegmentIds: string[];
 }
 
@@ -214,6 +250,52 @@ export interface TodoSuggestion {
   keep: boolean;
 }
 
+/** 七大資訊分類 */
+export type CategoryKey = 'c1' | 'c2' | 'c3' | 'c4' | 'c5' | 'c6' | 'c7';
+export type InfoStatus = 'explicit' | 'possible' | 'pending'; // 明確表示/可能/待確認
+export type UpdateTarget = 'company' | 'factory' | 'contact' | 'preference';
+
+export interface CategoryItem {
+  id: string;
+  text: string;
+  aspect?: string; // 子項目,例:數量、預算、時程
+  status: InfoStatus;
+  infoTime?: string; // 資訊時間,例:計畫明年 Q2
+  target?: UpdateTarget; // 可更新到客戶檔案的位置
+  mentionedBy?: string; // 提及者
+  sourceSegmentIds: string[];
+}
+
+/** 一般拜訪資訊(未遇窗口、對方無暇訪談、暫無新增資訊、其他接洽情況) */
+export type VisitKind = 'effective' | 'general';
+
+/** AI 建議寫回客戶檔案的欄位(業務逐筆採用後才寫入) */
+export type ProfileField =
+  | 'principal'
+  | 'phone'
+  | 'address'
+  | 'website'
+  | 'customerTypes'
+  | 'industries'
+  | 'products'
+  | 'markets'
+  | 'employeeScale'
+  | 'machine'
+  | 'automationLevel'
+  | 'automationProcess'
+  | 'contact';
+
+export interface ProfileUpdate {
+  id: string;
+  field: ProfileField;
+  value: string; // 顯示用文字;陣列欄位為單一值
+  machine?: { brand?: string; tonnage?: string; qty?: number };
+  contact?: { name: string; title?: string; department?: string; phone?: string; email?: string; role?: string };
+  status: InfoStatus;
+  sourceSegmentIds: string[];
+  decision: 'pending' | 'accepted' | 'rejected';
+}
+
 /** 題庫之外談到的內容,分類彙整到報告 */
 export type InsightKind = 'reminder' | 'avoid' | 'opportunity' | 'other';
 
@@ -235,6 +317,10 @@ export interface AnalysisResult {
   todos: TodoSuggestion[];
   insights?: Insight[];
   purpose?: string; // AI 找出的拜訪目的
+  visitKind?: VisitKind; // 有效拜訪/一般拜訪(業務可改)
+  generalNotes?: string[]; // 一般拜訪資訊:未遇窗口、對方無暇…
+  categories?: Partial<Record<CategoryKey, CategoryItem[]>>;
+  profileUpdates?: ProfileUpdate[];
   generatedAt: string;
 }
 
@@ -323,9 +409,12 @@ export interface Settings {
   integration?: IntegrationSettings;
   /** 本機 AI 伺服器(POC):有填網址就改用真實 AI,沒填用模擬 AI。設定存在各自的裝置 */
   aiServer?: { url: string; key: string; diarization: boolean };
-  industryOptions?: string[]; // 產業別選項
-  customerCategories?: string[]; // 客戶分類選項
+  industryOptions?: string[]; // 所屬產業選項
+  customerCategories?: string[]; // 客戶狀態選項
+  options?: Partial<Record<OptionKey, string[]>>; // 其他選項清單(後台維護)
 }
+
+export type OptionKey = 'customerTypes' | 'products' | 'identities' | 'moldInjection' | 'markets' | 'employeeScales' | 'contactRoles' | 'machineBrands' | 'automationProcesses';
 
 /** 對外串接(預留):Webhook 或 API。POC 只產生標準格式的資料並排入佇列,不實際送出 */
 export interface IntegrationSettings {

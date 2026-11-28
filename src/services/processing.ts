@@ -1,7 +1,7 @@
 import { ai } from './ai';
 import { canUpload, getState, showToast } from '../store/store';
 import { patchVisit, updateSettings } from '../store/actions';
-import { customerById, setById } from '../store/selectors';
+import { customerById, setById, visitQuestionItems } from '../store/selectors';
 import { sleep } from '../lib/util';
 
 // 處理流程:上傳 → 轉文字 → 整理重點 → 題庫比對。依實際狀態更新,業務可離開頁面,完成後跳出提示。
@@ -66,7 +66,13 @@ export async function runPipeline(visitId: string): Promise<void> {
     const result = await ai.analyze({
       segments,
       source: v.source,
-      questionSet: setById(st, v.questionSetId),
+      // 題組 + 前次未取得/部分取得的題目(自動追蹤)
+      questionSet: (() => {
+        const set = setById(st, v.questionSetId);
+        const items = visitQuestionItems(st, v);
+        if (!set && !items.length) return undefined;
+        return { ...(set || { id: 'tracked', name: '追蹤題目', active: true }), items };
+      })(),
       questions: st.questions,
       customer: customerById(st, v.customerId),
       customers: st.customers,

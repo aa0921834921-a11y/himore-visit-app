@@ -15,6 +15,7 @@ import type {
 } from '../../types';
 import { addDays, sleep, truncate, uid, ymd } from '../../lib/util';
 import type { AiService, AnalyzeInput, TranscribeInput } from './types';
+import { answerByAspects, classifyCategories, detectVisitKind, extractProfileUpdates } from './classify';
 
 // 模擬 AI:以規則比對產生「看起來像 AI」的整理結果,讓流程可以完整試用。
 // 不是真的語音辨識:錄音的逐字稿是固定的示範內容;文字輸入與口述打字則會依實際內容整理。
@@ -240,8 +241,11 @@ function answerQuestions(input: AnalyzeInput, sents: Sentence[]): AnswerItem[] {
   if (!set) return [];
   return set.items.map((item) => {
     const q = input.questions.find((x) => x.id === item.questionId);
-    const base: AnswerItem = { questionId: item.questionId, required: item.required, status: 'uncovered', answer: '', sourceSegmentIds: [] };
+    const base: AnswerItem = { questionId: item.questionId, required: item.required, tracked: item.tracked, status: 'uncovered', answer: '', sourceSegmentIds: [] };
     if (!q) return base;
+    // 有定義要點的題目(Q1–Q6 公版):判斷全部取得/部分取得並列出缺少的要點
+    const byAspects = answerByAspects(q, item, sents, input.segments);
+    if (byAspects) return byAspects;
     // 逐題口述:直接對應
     const direct = input.segments.filter((sg) => sg.questionId === q.id);
     if (direct.length) {
@@ -300,12 +304,12 @@ export function suggestCustomer(sents: Sentence[], customers: Customer[]): strin
 }
 
 const CANNED_RECORDING: { speaker: string; text: string }[] = [
-  { speaker: '業務', text: '今天主要想了解貴公司目前的設備狀況和擴線計畫。' },
-  { speaker: '客戶', text: '我們現在用的是 350 噸的射出機,總共 6 台。' },
+  { speaker: '業務', text: '張經理您好,今天主要想了解貴公司目前的設備狀況和擴線計畫。' },
+  { speaker: '客戶', text: '我們主要做家電零件,現在用的是海天 350 噸的射出機,總共 6 台,取件已經自動化了。' },
   { speaker: '客戶', text: '有在評估 GT 系列,預計導入 8 台,希望 12 月前完成。' },
   { speaker: '業務', text: '目前在生產上最想改善的是哪個部分?' },
   { speaker: '客戶', text: '取出時間太長,希望可以縮短,另外擔心跟既有機台的整合。' },
-  { speaker: '語者未確認', text: '預算的部分還要再跟老闆討論。' },
+  { speaker: '語者未確認', text: '預算的部分還要再跟老闆討論,最後由李廠長決定。' },
   { speaker: '客戶', text: '我們不太喜歡一直被比價,比較重視穩定品質跟售後。' },
   { speaker: '業務', text: '好的,我下週二前提供 GT 系列的報價,並確認 8 台的交期。' },
 ];
@@ -367,6 +371,8 @@ export const mockAi: AiService = {
     };
     const answers = answerQuestions(input, sents);
     const todos = extractTodos(sents, input.salesId, input.visitAt);
+    const categories = classifyCategories(sents, input.segments);
+    const kind = detectVisitKind(sents, categories);
     return {
       mock: true,
       suggestedCustomerId: input.customer ? undefined : customer?.id,
@@ -378,10 +384,14 @@ export const mockAi: AiService = {
       todos,
       insights: extractInsights(sents, answers, todos),
       purpose: extractPurpose(sents),
+      categories,
+      visitKind: kind.kind,
+      generalNotes: kind.notes,
+      profileUpdates: kind.kind === 'general' ? [] : extractProfileUpdates(sents, customer),
       generatedAt: new Date().toISOString(),
     };
   },
 };
 
 export const DEMO_TEXT =
-  '這次拜訪主要是確認導入規格與交期。\n客戶目前使用 350 噸射出機,共 6 台,正在評估 GT 系列取出機,預計導入 8 台,希望 12 月前完成。\n客戶希望縮短取出時間,但擔心與既有機台的整合。\n也有在比較日系廠牌的方案,預算大概 300 萬左右,還要老闆簽核。\n張經理表示不想再被比價,重視穩定品質與售後支援。\n另外客戶提到明年新廠還有一條產線也在規劃。\n我下週二前提供 GT 系列報價,並確認 8 台交期。';
+  '這次拜訪見到採購部張經理,主要是確認導入規格與交期。\n客戶主要做家電零件,目前使用海天 350 噸射出機,共 6 台,取件已經自動化,正在評估 GT 系列取出機,預計導入 8 台,希望 12 月前完成。\n客戶希望縮短取出時間,但擔心與既有機台的整合。\n也有在比較日系廠牌的方案,預算大概 300 萬左右,還要老闆簽核。\n張經理表示不想再被比價,重視穩定品質與售後支援,最後由李廠長決定。\n另外客戶提到明年新廠還有一條產線也在規劃。\n我下週二前提供 GT 系列報價,並確認 8 台交期。';

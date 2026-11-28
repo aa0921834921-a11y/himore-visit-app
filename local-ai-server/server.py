@@ -43,7 +43,7 @@ ASR_WINDOW_MIN = int(os.environ.get("ASR_WINDOW_MIN", "10"))  # 長錄音每幾�
 HF_TOKEN = os.environ.get("HF_TOKEN", "")  # 有填才啟用語者分離
 API_KEY = os.environ.get("API_KEY", "")  # App 呼叫時要帶 X-Api-Key;留空=不檢查(只建議在區網測試)
 FAKE = os.environ.get("FAKE_MODELS", "") == "1"  # 不載入模型,回傳示範結果(測試 App 串接用)
-VERSION = "0.1.0"
+VERSION = "0.2.0"
 
 app = FastAPI(title="HI-MORE Local AI", version=VERSION)
 app.add_middleware(CORSMiddleware, allow_origins=["*"], allow_methods=["*"], allow_headers=["*"])
@@ -77,7 +77,7 @@ def deep_tw(x: Any) -> Any:
     if isinstance(x, list):
         return [deep_tw(i) for i in x]
     if isinstance(x, dict):
-        return {k: (v if k in ("id", "question_id", "segment_ids", "segment_id", "status", "type", "target", "kind", "due") else deep_tw(v)) for k, v in x.items()}
+        return {k: (v if k in ("id", "question_id", "segment_ids", "segment_id", "status", "type", "target", "kind", "due", "field", "visit_kind") else deep_tw(v)) for k, v in x.items()}
     return x
 
 
@@ -435,6 +435,41 @@ def extract_file(data: bytes, name: str, mime: str, progress) -> dict:
     return {"text": f"(「{name}」格式不支援讀取內容)", "method": "none"}
 
 
+CARD_SCHEMA = {
+    "type": "object",
+    "properties": {k: {"type": "string"} for k in (
+        "company_name", "tax_id", "company_phone", "fax", "city", "district", "street", "website",
+        "contact_name", "title", "department", "mobile", "email", "raw_text",
+    )},
+    "required": ["company_name", "contact_name", "raw_text"],
+}
+
+
+def read_card(img_bytes: bytes, progress) -> dict:
+    """名片辨識:讀出公司與聯絡人欄位(新增客戶用)"""
+    if FAKE:
+        time.sleep(1.5)
+        return {"company_name": "(示範)永群精密模具有限公司", "tax_id": "", "company_phone": "03-3811613", "fax": "", "city": "桃園市", "district": "龜山區", "street": "文化一路 100 號",
+                "website": "www.yongqun.example", "contact_name": "陳志明", "title": "工程部主任", "department": "工程部", "mobile": "0912-345-678", "email": "chen@yongqun.example", "raw_text": "示範名片"}
+    if not VISION_MODEL:
+        raise RuntimeError("AI 伺服器尚未設定照片辨識模型(config.bat 的 VISION_MODEL),無法辨識名片")
+    import base64
+
+    asr_offload()
+    ollama_unload(LLM_MODEL)
+    progress("辨識名片中")
+    prompt = (
+        "這是一張台灣的名片照片。請逐字讀出名片上的資訊,依欄位輸出 JSON,看不到的欄位填空字串,不可猜測:"
+        "company_name 公司全名、tax_id 統一編號(8 碼數字)、company_phone 公司電話(區碼-號碼)、fax 傳真、"
+        "city 縣市、district 區域(鄉鎮市區)、street 街道門號、website 網址、"
+        "contact_name 姓名、title 職稱、department 部門、mobile 手機、email、raw_text 名片上全部文字。"
+        "電話、Email、網址要完全照抄。只用繁體中文。"
+    )
+    out = ollama_chat(VISION_MODEL, [{"role": "user", "content": prompt, "images": [base64.b64encode(img_bytes).decode()]}], fmt=CARD_SCHEMA, ctx=8192)
+    ollama_unload(VISION_MODEL)
+    return deep_tw(parse_json(out))
+
+
 # ---------------------------------------------------------------- 整合分析
 
 class Seg(BaseModel):
@@ -449,7 +484,9 @@ class Q(BaseModel):
     id: str
     code: str = ""
     text: str
+    hint: str = ""  # 希望帶回的資訊
     required: bool = False
+    tracked: bool = False  # 前次未取得、本次追蹤
 
 
 class AnalyzeReq(BaseModel):
@@ -459,11 +496,28 @@ class AnalyzeReq(BaseModel):
     contacts: list[str] = []
     glossary: list[str] = []
     visit_date: str | None = None  # YYYY-MM-DD
+    profile: str = ""  # 客戶檔案目前已有的資料(避免重複建議)
 
 
+_IDS = {"type": "array", "items": {"type": "string"}}
+_CAT_ITEM = {
+    "type": "object",
+    "properties": {
+        "text": {"type": "string"},
+        "aspect": {"type": "string"},
+        "status": {"type": "string", "enum": ["explicit", "possible", "pending"]},
+        "info_time": {"type": "string"},
+        "target": {"type": "string", "enum": ["", "company", "factory", "contact", "preference"]},
+        "mentioned_by": {"type": "string"},
+        "segment_ids": _IDS,
+    },
+    "required": ["text", "aspect", "status", "info_time", "target", "segment_ids"],
+}
 SCHEMA = {
     "type": "object",
     "properties": {
+        "visit_kind": {"type": "string", "enum": ["effective", "general"]},
+        "general_notes": {"type": "array", "items": {"type": "string", "enum": ["未遇窗口", "對方無暇訪談", "暫無新增資訊", "其他接洽情況"]}},
         "purpose": {"type": "string"},
         "answers": {
             "type": "array",
@@ -473,22 +527,42 @@ SCHEMA = {
                     "question_id": {"type": "string"},
                     "status": {"type": "string", "enum": ["answered", "partial", "uncovered"]},
                     "answer": {"type": "string"},
-                    "segment_ids": {"type": "array", "items": {"type": "string"}},
+                    "missing": {"type": "string"},
+                    "segment_ids": _IDS,
                 },
-                "required": ["question_id", "status", "answer", "segment_ids"],
+                "required": ["question_id", "status", "answer", "missing", "segment_ids"],
             },
         },
-        "summary": {
+        "categories": {
             "type": "object",
-            "properties": {
-                k: {"type": "object", "properties": {"text": {"type": "string"}, "segment_ids": {"type": "array", "items": {"type": "string"}}}, "required": ["text", "segment_ids"]}
-                for k in ("keyPoints", "needs", "competitors", "objections", "nextSteps")
+            "properties": {k: {"type": "array", "items": _CAT_ITEM} for k in ("c1", "c2", "c3", "c4", "c5", "c6", "c7")},
+            "required": ["c1", "c2", "c3", "c4", "c5", "c6", "c7"],
+        },
+        "profile_updates": {
+            "type": "array",
+            "items": {
+                "type": "object",
+                "properties": {
+                    "field": {"type": "string", "enum": ["principal", "phone", "address", "website", "customerTypes", "industries", "products", "markets", "employeeScale", "machine", "automationLevel", "automationProcess", "contact"]},
+                    "value": {"type": "string"},
+                    "brand": {"type": "string"},
+                    "tonnage": {"type": "string"},
+                    "qty": {"type": "integer"},
+                    "contact_name": {"type": "string"},
+                    "contact_title": {"type": "string"},
+                    "contact_department": {"type": "string"},
+                    "contact_phone": {"type": "string"},
+                    "contact_email": {"type": "string"},
+                    "contact_role": {"type": "string"},
+                    "status": {"type": "string", "enum": ["explicit", "possible", "pending"]},
+                    "segment_ids": _IDS,
+                },
+                "required": ["field", "value", "status", "segment_ids"],
             },
-            "required": ["keyPoints", "needs", "competitors", "objections", "nextSteps"],
         },
         "todos": {
             "type": "array",
-            "items": {"type": "object", "properties": {"content": {"type": "string"}, "due": {"type": "string"}, "segment_ids": {"type": "array", "items": {"type": "string"}}}, "required": ["content", "due", "segment_ids"]},
+            "items": {"type": "object", "properties": {"content": {"type": "string"}, "due": {"type": "string"}, "segment_ids": _IDS}, "required": ["content", "due", "segment_ids"]},
         },
         "prefs": {
             "type": "array",
@@ -499,40 +573,51 @@ SCHEMA = {
                     "target": {"type": "string", "enum": ["customer", "contact"]},
                     "target_name": {"type": "string"},
                     "content": {"type": "string"},
-                    "segment_ids": {"type": "array", "items": {"type": "string"}},
+                    "segment_ids": _IDS,
                 },
                 "required": ["type", "target", "target_name", "content", "segment_ids"],
             },
         },
-        "insights": {
-            "type": "array",
-            "items": {
-                "type": "object",
-                "properties": {"kind": {"type": "string", "enum": ["reminder", "avoid", "opportunity", "other"]}, "text": {"type": "string"}, "segment_ids": {"type": "array", "items": {"type": "string"}}},
-                "required": ["kind", "text", "segment_ids"],
-            },
-        },
     },
-    "required": ["purpose", "answers", "summary", "todos", "prefs", "insights"],
+    "required": ["visit_kind", "general_notes", "purpose", "answers", "categories", "profile_updates", "todos", "prefs"],
 }
 
-SYSTEM = """你是工業設備公司「哈鏌」的業務助理,負責把業務拜訪客戶的內容整理成拜訪紀錄。只用繁體中文(台灣用語)回答,只輸出 JSON。
+SYSTEM = """你是工業設備公司「哈鏌」(射出成型周邊設備:取出機等)的業務助理,負責把業務拜訪客戶的內容整理成拜訪紀錄。只用繁體中文(台灣用語)回答,只輸出 JSON。
 
-規則:
-1. 只能根據提供的「原文段落」整理,不可以推測或補充原文沒有的資訊。沒有依據的欄位,text 寫「未知」、segment_ids 留空陣列。
-2. 每個結論都要在 segment_ids 填上依據的段落編號(例如 "S3"),只能填原文中出現的編號。
-3. 標示「業務補充」的段落是業務事後補的,時間比較新。如果補充內容更正了前面的說法(例如「剛剛說錯了」「應該是」「更正」),一律以補充內容為準,舊的說法不要採用。
+共同規則:
+1. 只能根據提供的「原文段落」整理,不可以推測或補充原文沒有的資訊。未提及就留空;不確定就不推定。
+2. 每一筆都要在 segment_ids 填上依據的段落編號(例如 "S3"),只能填原文中出現的編號。
+3. 標示「業務補充」的段落是業務事後補的,時間比較新。補充內容更正了前面的說法(「剛剛說錯了」「應該是」「更正」)時,一律以補充為準,舊的說法不要採用。
 4. 標示「附件」的段落是照片或檔案抽出的文字(名片、規格書等),可以作為依據。
-5. 數字、型號、日期、金額、人名要照原文寫,不可改動或換算。
-6. answers:題組中的每一題都要回覆一筆。
-   - answered:原文有明確回答;answer 用一兩句話整理答案。
-   - partial:只提到一部分;answer 寫已知的部分,並說明缺什麼。
-   - uncovered:原文完全沒提到;answer 寫空字串、segment_ids 空陣列。不確定時寧可判 uncovered,不要硬湊。
-7. summary:keyPoints 本次重點(兩三句)、needs 客戶需求、competitors 競品與比較、objections 客戶的顧慮與異議、nextSteps 下一步。
-8. todos:業務答應要做或需要追蹤的事;due 只有原文有明確日期或「下週三」這類說法時,換算成 YYYY-MM-DD,否則填空字串。
-9. prefs:客戶或特定聯絡人的偏好(preference)與要避免的事(avoid),例如溝通方式、重視的點、不喜歡的做法。target 是 customer(整間公司)或 contact(某位聯絡人,target_name 填稱呼)。
-10. insights:題組以外談到、值得主管知道的內容。reminder 特別提醒(要注意的條件、時程、決策者意見)、avoid 需規避、opportunity 商機線索(新廠、其他產線、轉介)、other 其他資訊。已經寫在 answers 或 todos 的不要重複。
-11. purpose:這次拜訪的目的,一句話;原文沒提到就填空字串。"""
+5. 數字、型號、廠牌、日期、金額、人名照原文寫,不可改動或換算。
+6. status:explicit=客戶明確表示;possible=語氣不確定(大概、可能、考慮);pending=需要再確認。
+
+各欄位:
+A. visit_kind:有任何具體拜訪資訊(需求、設備、決策、競品、考量、後續行動等)就是 effective;只有接洽情況(未遇窗口、對方無暇、暫無新增資訊)就是 general,並在 general_notes 選擇符合的項目。有效與否和是否成交無關。
+B. purpose:這次拜訪的目的,一句話;沒提到就填空字串。
+C. answers:題組中每一題都要回覆一筆。
+   - answered:題目「希望帶回的資訊」都取得了;answer 用一兩句話整理。
+   - partial:只取得一部分;answer 寫已知的部分,missing 寫還缺什麼(例:「射出機數量」)。
+   - uncovered:完全沒提到;answer、missing 空字串,segment_ids 空陣列。不確定時寧可判 uncovered。
+   - 標示「追蹤」的題目是上次沒問到的,同樣判斷。
+D. categories:把內容依關聯性歸入七大分類,每類 0~4 筆,每筆一句話;同一句話可以歸入不同分類的不同面向,但不要整句重複。
+   c1 拜訪目的與結果(目的、方式、成果、新取得資訊、未成果原因)
+   c2 採購需求與進展(產品/規格、數量、預算、時程、採購階段;使用情境、需求原因、採購條件)
+   c3 工廠現況與計畫(射出機廠牌/噸數/數量、生產產品、擴廠/汰換;自動化現況、周邊設備、設備問題)
+   c4 接洽人與決策資訊(姓名、職稱、部門、評估/採購/決策角色;對方案的態度、其他需參與的人)
+   c5 競品與市場資訊(供應商、比較品牌、使用評價、市場消息;消息來源、涉及對象、發生時間)
+   c6 客戶考量與偏好(價格、品質、交期、整合疑慮、服務期待;考量優先順序、具體接受條件)
+   c7 後續行動與待確認(下一步、負責人、期限、待釐清內容;我方承諾、客戶承諾、預計回覆時間)
+   每筆的 aspect 寫面向(例:數量、預算、射出機、決策角色);info_time 寫資訊時間(例:明年 Q2、下週三前),沒有就空字串;target 寫可更新到客戶檔案的位置:company 公司資料、factory 工廠設備、contact 聯絡人、preference 偏好,都不是就空字串;mentioned_by 寫提及者。
+E. profile_updates:原文中可以寫進客戶檔案、而且「客戶檔案目前已有的資料」裡還沒有的事實。
+   - machine:客戶「已經有」的射出機(打算買的不算),填 brand、tonnage(只寫數字)、qty;value 寫「海天 350 噸 × 6 台」。
+   - products:客戶生產的射出產品,一筆一個(例:家電零件);markets、industries、customerTypes 同理。
+   - automationProcess:已經自動化的製程,一筆一個(取件、剪料頭/修邊、檢測、秤重、雷射標記、搬運/供料、組裝、包裝/堆疊)。automationLevel:傳統人工/半自動化/全自動化。
+   - contact:新出現的聯絡人,填 contact_name(稱呼,例:陳主任)、contact_title、contact_department、contact_phone、contact_email、contact_role(決策者/採購窗口/技術評估/使用單位/影響者)。
+   - principal 公司負責人、phone 公司電話、address 地址、website 網址、employeeScale 員工規模。
+   - 語氣不確定的標 possible;沒有就回空陣列。
+F. todos:業務答應要做或需要追蹤的事;due 只有原文有明確日期或「下週三」這類說法時換算成 YYYY-MM-DD,否則空字串。
+G. prefs:客戶或特定聯絡人的偏好(preference)與要避免的事(avoid),例如溝通方式、重視的點、不喜歡的做法。target 是 customer 或 contact(target_name 填稱呼)。"""
 
 
 def build_prompt(req: AnalyzeReq) -> str:
@@ -545,7 +630,9 @@ def build_prompt(req: AnalyzeReq) -> str:
         if s.question_id and s.question_id in qmap:
             tag.append(f"回答 {qmap[s.question_id].code or s.question_id}")
         lines.append(f"[{s.id}]{'(' + '/'.join(tag) + ')' if tag else ''} {s.text}")
-    qs = "\n".join(f"- question_id={q.id}|{q.code} {q.text}{'(必答)' if q.required else ''}" for q in req.questions) or "(本次沒有題組,answers 請回空陣列)"
+    qs = "\n".join(
+        f"- question_id={q.id}|{q.code} {q.text}{'(必答)' if q.required else ''}{'(追蹤:上次未取得)' if q.tracked else ''}{'|希望帶回:' + q.hint if q.hint else ''}" for q in req.questions
+    ) or "(本次沒有題組,answers 請回空陣列)"
     ctx = []
     if req.customer_name:
         ctx.append(f"客戶:{req.customer_name}")
@@ -554,6 +641,8 @@ def build_prompt(req: AnalyzeReq) -> str:
     if req.glossary:
         ctx.append(f"專有名詞(語音轉文字可能聽錯,請以這些寫法為準):{'、'.join(req.glossary)}")
     ctx.append(f"拜訪日期:{req.visit_date or date.today().isoformat()}(用來換算「下週三」這類日期)")
+    if req.profile:
+        ctx.append(f"客戶檔案目前已有的資料(profile_updates 不要重複):{req.profile}")
     return "\n".join(ctx) + f"\n\n【題組】\n{qs}\n\n【原文段落】\n" + "\n".join(lines) + "\n\n請依規則輸出 JSON。"
 
 
@@ -574,11 +663,12 @@ MERGE_SYSTEM = """你是工業設備公司「哈鏌」的業務助理。一場�
 
 規則:
 1. 只能使用各部分結果與「業務補充」裡的內容,不可以新增。segment_ids 只能沿用其中出現過的編號。
-2. answers:每一題輸出一筆。任一部分 answered 就是 answered;只有 partial 就是 partial;全部 uncovered 才是 uncovered。答案合併成一兩句話。
-3. 前後說法矛盾時,以後面部分為準;「業務補充」的內容(附在最後)比所有部分都新,有更正時一律以補充為準。
-4. summary 五個欄位各寫成一段完整的整理,不是逐段列出。沒有內容寫「未知」。
-5. todos、prefs、insights 合併重複的項目;與 answers、todos 重複的 insights 不要再列。
-6. purpose 取最能代表整場拜訪的一句;都沒有就填空字串。"""
+2. visit_kind:任一部分是 effective 就是 effective。
+3. answers:每一題輸出一筆。任一部分 answered 就是 answered;只有 partial 就是 partial,missing 寫所有部分合起來仍缺的資訊;全部 uncovered 才是 uncovered。
+4. 前後說法矛盾時,以後面部分為準;「業務補充」的內容(附在最後)比所有部分都新,有更正時一律以補充為準。
+5. categories 七大分類:合併各部分同類的內容,去除重複,每類最多 4 筆。
+6. profile_updates、todos、prefs 合併重複的項目;同一台射出機只留一筆(以後面部分或補充為準)。
+7. purpose 取最能代表整場拜訪的一句;都沒有就填空字串。"""
 
 
 def split_segments(segs: list[Seg], limit: int) -> list[list[Seg]]:
@@ -617,13 +707,18 @@ def merge_fallback(req: AnalyzeReq, parts: list[dict]) -> dict:
         best = max((rank.get(a.get("status"), 0) for a in hits), default=0)
         st = {2: "answered", 1: "partial", 0: "uncovered"}[best]
         ans = ";".join(dict.fromkeys(a.get("answer", "") for a in hits if a.get("answer") and a.get("status") != "uncovered"))
+        missing = next((a.get("missing", "") for a in reversed(hits) if a.get("status") == "partial"), "") if st == "partial" else ""
         ids = [i for a in hits for i in a.get("segment_ids", [])]
-        answers.append({"question_id": q.id, "status": st, "answer": ans if st != "uncovered" else "", "segment_ids": ids if st != "uncovered" else []})
-    summary = {}
-    for k in ("keyPoints", "needs", "competitors", "objections", "nextSteps"):
-        texts = [p.get("summary", {}).get(k, {}) for p in parts]
-        good = [t for t in texts if t.get("text") and t.get("text") != "未知"]
-        summary[k] = {"text": ";".join(dict.fromkeys(t["text"] for t in good)) or "未知", "segment_ids": [i for t in good for i in t.get("segment_ids", [])]}
+        answers.append({"question_id": q.id, "status": st, "answer": ans if st != "uncovered" else "", "missing": missing, "segment_ids": ids if st != "uncovered" else []})
+    cats = {}
+    for k in ("c1", "c2", "c3", "c4", "c5", "c6", "c7"):
+        seen, items = set(), []
+        for p in parts:
+            for it in (p.get("categories") or {}).get(k, []):
+                if it.get("text") and it["text"] not in seen:
+                    seen.add(it["text"])
+                    items.append(it)
+        cats[k] = items[:4]
 
     def uniq(key, field):
         seen, out = set(), []
@@ -635,8 +730,10 @@ def merge_fallback(req: AnalyzeReq, parts: list[dict]) -> dict:
                     out.append(x)
         return out
 
+    kind = "effective" if any(p.get("visit_kind") == "effective" for p in parts) else "general"
+    notes = list(dict.fromkeys(n for p in parts for n in p.get("general_notes", []))) if kind == "general" else []
     purpose = next((p.get("purpose") for p in parts if p.get("purpose")), "")
-    return {"purpose": purpose, "answers": answers, "summary": summary, "todos": uniq("todos", "content"), "prefs": uniq("prefs", "content"), "insights": uniq("insights", "text")}
+    return {"visit_kind": kind, "general_notes": notes, "purpose": purpose, "answers": answers, "categories": cats, "profile_updates": uniq("profile_updates", "value"), "todos": uniq("todos", "content"), "prefs": uniq("prefs", "content")}
 
 
 def analyze(req: AnalyzeReq, progress) -> dict:
@@ -644,19 +741,27 @@ def analyze(req: AnalyzeReq, progress) -> dict:
         time.sleep(2)
         sid = [s.id for s in req.segments]
         first = sid[:1]
+        it = lambda text, aspect, target="": {"text": text, "aspect": aspect, "status": "explicit", "info_time": "", "target": target, "mentioned_by": "", "segment_ids": first}  # noqa: E731
         return {
+            "visit_kind": "effective",
+            "general_notes": [],
             "purpose": "了解現有射出機狀況",
-            "answers": [{"question_id": q.id, "status": "answered" if i < 2 else "uncovered", "answer": "(示範)現有 8 台 350 噸射出機" if i < 2 else "", "segment_ids": first if i < 2 else []} for i, q in enumerate(req.questions)],
-            "summary": {
-                "keyPoints": {"text": "(示範)客戶有 8 台舊機台,年底前評估汰換。", "segment_ids": first},
-                "needs": {"text": "降低維修成本、汰換老舊機台", "segment_ids": first},
-                "competitors": {"text": "未知", "segment_ids": []},
-                "objections": {"text": "不想再被比價", "segment_ids": first},
-                "nextSteps": {"text": "下週三前寄送 GT 系列報價", "segment_ids": first},
+            "answers": [
+                {"question_id": q.id, "status": "answered" if i < 2 else ("partial" if i == 2 else "uncovered"), "answer": "(示範)海天 350 噸射出機" if i < 3 else "", "missing": "射出機數量" if i == 2 else "", "segment_ids": first if i < 3 else []}
+                for i, q in enumerate(req.questions)
+            ],
+            "categories": {
+                "c1": [it("(示範)了解現有射出機狀況", "目的與成果")],
+                "c2": [it("評估汰換老舊機台,預算約五百萬", "預算")],
+                "c3": [it("八台三百五十噸機台,用了快十年,兩台常故障", "射出機", "factory")],
+                "c4": [it("老闆希望年底前完成評估", "決策角色")],
+                "c5": [],
+                "c6": [it("不想再被比價", "考量重點", "preference")],
+                "c7": [it("下週三前寄送 GT 系列報價", "我方承諾")],
             },
+            "profile_updates": [{"field": "machine", "value": "350 噸 × 8 台", "tonnage": "350", "qty": 8, "status": "explicit", "segment_ids": first}],
             "todos": [{"content": "寄送 GT 系列報價與節能數據", "due": "", "segment_ids": first}],
             "prefs": [{"type": "avoid", "target": "customer", "target_name": req.customer_name or "客戶", "content": "不想再被比價", "segment_ids": first}],
-            "insights": [{"kind": "reminder", "text": "老闆希望年底前完成評估", "segment_ids": first}],
         }
     asr_offload()
     if VISION_MODEL:
@@ -674,7 +779,7 @@ def analyze(req: AnalyzeReq, progress) -> dict:
     parts = []
     for i, g in enumerate(groups):
         progress(f"AI 分段整理 {i + 1}/{len(groups)}(逐字稿共 {total:,} 字)")
-        sub = AnalyzeReq(segments=g, questions=req.questions, customer_name=req.customer_name, contacts=req.contacts, glossary=req.glossary, visit_date=req.visit_date)
+        sub = AnalyzeReq(segments=g, questions=req.questions, customer_name=req.customer_name, contacts=req.contacts, glossary=req.glossary, visit_date=req.visit_date, profile=req.profile)
         note = f"\n\n(注意:這是一場長時間拜訪的第 {i + 1}/{len(groups)} 部分,只整理這部分的內容;這部分沒提到的題目標 uncovered,其他部分會另外整理。)"
         parts.append(llm_json(SYSTEM, build_prompt(sub) + note, progress, f"第 {i + 1} 段"))
 
@@ -682,14 +787,15 @@ def analyze(req: AnalyzeReq, progress) -> dict:
 
 
 def compact(p: dict) -> dict:
-    """彙整前精簡各段結果:拿掉沒蒐集到的題目與空白摘要,省長度"""
+    """彙整前精簡各段結果:拿掉沒蒐集到的題目與空白分類,省長度"""
     return {
+        "visit_kind": p.get("visit_kind", ""),
         "purpose": p.get("purpose", ""),
         "answers": [a for a in p.get("answers", []) if a.get("status") != "uncovered"],
-        "summary": {k: v for k, v in (p.get("summary") or {}).items() if v.get("text") and v.get("text") != "未知"},
+        "categories": {k: v for k, v in (p.get("categories") or {}).items() if v},
+        "profile_updates": p.get("profile_updates", []),
         "todos": p.get("todos", []),
         "prefs": p.get("prefs", []),
-        "insights": p.get("insights", []),
     }
 
 
@@ -768,6 +874,16 @@ async def job_extract(file: UploadFile = File(...), x_api_key: str | None = Head
     name = file.filename or "file"
     mime = file.content_type or ""
     jid = jobs.submit("extract", lambda p: extract_file(data, name, mime, p))
+    return {"job_id": jid}
+
+
+@app.post("/jobs/card")
+async def job_card(file: UploadFile = File(...), x_api_key: str | None = Header(default=None)):
+    check_key(x_api_key)
+    data = await file.read()
+    if not data:
+        raise HTTPException(400, "照片是空的")
+    jid = jobs.submit("card", lambda p: read_card(data, p))
     return {"job_id": jid}
 
 

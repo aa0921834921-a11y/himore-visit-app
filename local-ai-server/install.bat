@@ -1,84 +1,121 @@
 @echo off
-chcp 65001 >nul
 cd /d "%~dp0"
 call config.bat
 echo.
-echo ===== 哈鏌本機 AI 伺服器:安裝 =====
+echo ===== HI-MORE Local AI Server : INSTALL =====
 echo.
 
 REM ---- 1. Python 3.11
 set PY=
 py -3.11 --version >nul 2>&1 && set PY=py -3.11
+if "%PY%"=="" py -3.12 --version >nul 2>&1 && set PY=py -3.12
 if "%PY%"=="" (
-  py -3.12 --version >nul 2>&1 && set PY=py -3.12
-)
-if "%PY%"=="" (
-  echo [1/6] 找不到 Python 3.11,嘗試用 winget 安裝...
+  echo [1/6] Python 3.11 not found. Installing with winget...
   winget install -e --id Python.Python.3.11 --accept-package-agreements --accept-source-agreements
   py -3.11 --version >nul 2>&1 && set PY=py -3.11
 )
 if "%PY%"=="" (
-  echo 安裝 Python 失敗。請到 https://www.python.org/downloads/ 安裝 Python 3.11 後再執行一次。
-  pause & exit /b 1
+  echo Python install failed. Install Python 3.11 from https://www.python.org/downloads/
+  echo then CLOSE this window and run install.bat again.
+  pause
+  exit /b 1
 )
-echo [1/6] 使用 %PY%
+echo [1/6] Using %PY%
 
-REM ---- 2. 虛擬環境
-if not exist .venv (
-  %PY% -m venv .venv || (echo 建立虛擬環境失敗 & pause & exit /b 1)
+REM ---- 2. Virtual environment
+if not exist .venv\Scripts\python.exe (
+  %PY% -m venv .venv
+)
+if not exist .venv\Scripts\python.exe (
+  echo Failed to create virtual environment.
+  pause
+  exit /b 1
 )
 set VPY=.venv\Scripts\python.exe
 %VPY% -m pip install --upgrade pip -q
 
-REM ---- 3. PyTorch(CUDA 版)
-echo [2/6] 安裝 PyTorch(CUDA,檔案約 2.5GB,請耐心等候)...
-%VPY% -m pip install torch torchaudio --index-url https://download.pytorch.org/whl/cu124 || (echo 安裝 PyTorch 失敗 & pause & exit /b 1)
-%VPY% -c "import torch;print('      CUDA 可用:',torch.cuda.is_available(),'|',torch.cuda.get_device_name(0) if torch.cuda.is_available() else '未偵測到顯示卡,請更新 NVIDIA 驅動程式')"
+REM ---- 3. PyTorch (CUDA)
+echo [2/6] Installing PyTorch with CUDA (about 2.5GB, please wait)...
+%VPY% -m pip install torch torchaudio --index-url https://download.pytorch.org/whl/cu124
+if errorlevel 1 (
+  echo PyTorch install failed.
+  pause
+  exit /b 1
+)
+%VPY% -c "import torch;print('      CUDA available:',torch.cuda.is_available(),'|',torch.cuda.get_device_name(0) if torch.cuda.is_available() else 'NO GPU - update NVIDIA driver')"
 
-REM ---- 4. 其他套件
-echo [3/6] 安裝其他套件...
-%VPY% -m pip install -r requirements.txt -q || (echo 安裝套件失敗 & pause & exit /b 1)
+REM ---- 4. Other packages
+echo [3/6] Installing other packages...
+%VPY% -m pip install -r requirements.txt -q
+if errorlevel 1 (
+  echo Package install failed.
+  pause
+  exit /b 1
+)
 if not "%HF_TOKEN%"=="" (
-  echo       已設定 HF_TOKEN,安裝語者分離套件...
+  echo       HF_TOKEN set - installing speaker separation...
   %VPY% -m pip install "pyannote.audio>=3.1,<4" -q
 )
 
-REM ---- 5. 下載語音模型
-echo [4/6] 下載語音模型 %ASR_MODEL%(約 3GB)...
-%VPY% -c "from huggingface_hub import snapshot_download;snapshot_download('%ASR_MODEL%')" || echo       下載失敗,第一次轉寫時會再自動下載
+REM ---- 5. Speech model
+echo [4/6] Downloading speech model %ASR_MODEL% (about 3GB)...
+%VPY% -c "from huggingface_hub import snapshot_download;snapshot_download('%ASR_MODEL%')"
+if errorlevel 1 echo       Download failed - it will retry on first transcription.
 
-REM ---- 6. Ollama 與語言模型
-where ollama >nul 2>&1
-if errorlevel 1 (
-  echo [5/6] 安裝 Ollama...
+REM ---- 6. Ollama + analysis model
+call :find_ollama
+if "%OLLAMA%"=="" (
+  echo [5/6] Installing Ollama...
   winget install -e --id Ollama.Ollama --accept-package-agreements --accept-source-agreements
-  set "PATH=%PATH%;%LOCALAPPDATA%\Programs\Ollama"
+  call :find_ollama
 )
-where ollama >nul 2>&1
-if errorlevel 1 (
-  echo 找不到 Ollama。請到 https://ollama.com/download 安裝後,重新開啟視窗再執行一次。
-  pause & exit /b 1
+if "%OLLAMA%"=="" (
+  echo Ollama not found. Install from https://ollama.com/download
+  echo then CLOSE this window and run install.bat again.
+  pause
+  exit /b 1
 )
-echo [5/6] 下載語言模型 %LLM_MODEL%(約 5GB)...
-ollama pull %LLM_MODEL%
+echo [5/6] Downloading analysis model %LLM_MODEL% (about 5GB)...
+"%OLLAMA%" pull %LLM_MODEL%
 if not "%VISION_MODEL%"=="" (
-  echo       下載視覺模型 %VISION_MODEL%...
-  ollama pull %VISION_MODEL%
+  echo       Downloading photo model %VISION_MODEL%...
+  "%OLLAMA%" pull %VISION_MODEL%
 )
 
-REM ---- 7. Cloudflare Tunnel(讓手機從外面連進來)
-where cloudflared >nul 2>&1
-if errorlevel 1 (
-  echo [6/6] 安裝 Cloudflare Tunnel...
+REM ---- 7. Cloudflare Tunnel
+call :find_cf
+if "%CF%"=="" (
+  echo [6/6] Installing Cloudflare Tunnel...
   winget install -e --id Cloudflare.cloudflared --accept-package-agreements --accept-source-agreements
+  call :find_cf
+)
+if "%CF%"=="" (
+  echo [6/6] cloudflared NOT found. Download cloudflared-windows-amd64.msi from
+  echo       https://github.com/cloudflare/cloudflared/releases/latest and install it.
 ) else (
-  echo [6/6] Cloudflare Tunnel 已安裝
+  echo [6/6] Cloudflare Tunnel OK: %CF%
 )
 
 echo.
-echo ===== 安裝完成 =====
-echo 1. 執行 start.bat 啟動伺服器
-echo 2. 另開一個視窗執行 tunnel.bat,取得 https://xxxx.trycloudflare.com 網址
-echo 3. App「AI 伺服器設定」填入網址與金鑰(config.bat 的 API_KEY)
+echo ===== INSTALL FINISHED =====
+echo 1. Run start.bat  (keep the window open)
+echo 2. Run tunnel.bat (copy the https://xxxx.trycloudflare.com address)
+echo 3. In the App: enter the address and the API_KEY from config.bat
 echo.
 pause
+exit /b 0
+
+:find_ollama
+set OLLAMA=
+for %%P in (ollama.exe) do if not "%%~$PATH:P"=="" set "OLLAMA=%%~$PATH:P"
+if "%OLLAMA%"=="" if exist "%LOCALAPPDATA%\Programs\Ollama\ollama.exe" set "OLLAMA=%LOCALAPPDATA%\Programs\Ollama\ollama.exe"
+exit /b 0
+
+:find_cf
+set CF=
+for %%P in (cloudflared.exe) do if not "%%~$PATH:P"=="" set "CF=%%~$PATH:P"
+if "%CF%"=="" if exist "%ProgramFiles(x86)%\cloudflared\cloudflared.exe" set "CF=%ProgramFiles(x86)%\cloudflared\cloudflared.exe"
+if "%CF%"=="" if exist "%ProgramFiles%\cloudflared\cloudflared.exe" set "CF=%ProgramFiles%\cloudflared\cloudflared.exe"
+if "%CF%"=="" if exist "%LOCALAPPDATA%\Microsoft\WinGet\Links\cloudflared.exe" set "CF=%LOCALAPPDATA%\Microsoft\WinGet\Links\cloudflared.exe"
+if "%CF%"=="" if exist "%~dp0cloudflared.exe" set "CF=%~dp0cloudflared.exe"
+exit /b 0

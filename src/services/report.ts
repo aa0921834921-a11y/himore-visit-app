@@ -1,5 +1,7 @@
 import type { AppState, Insight, InsightKind, Visit } from '../types';
-import { customerById, industriesOf, purposeOf, questionById, setById, userById } from '../store/selectors';
+import { categoriesOf, customerById, industriesOf, purposeOf, questionById, setById, userById, visitKindOf } from '../store/selectors';
+import { CATEGORIES, FIELD_LABEL, INFO_STATUS_LABEL, TARGET_LABEL, addressOf, machinesText } from '../store/options';
+import { isAcceptedUpdate } from '../store/actions';
 import { fmtDate, fmtDateTime } from '../lib/util';
 
 // 拜訪報告:把題庫比對結果與「題庫之外」談到的內容分類彙整。
@@ -30,6 +32,13 @@ export interface VisitReport {
     website?: string;
     category?: string;
     owner?: string;
+    principal?: string;
+    phone?: string;
+    customerTypes: string[];
+    products: string[];
+    markets: string[];
+    machines?: string;
+    automation?: string;
     industries: string[];
     contacts: { name: string; title?: string; department?: string; phone?: string; email?: string; decisionRole?: string; preference?: string }[];
   };
@@ -39,6 +48,9 @@ export interface VisitReport {
   questionSet?: { id: string; name: string; scope: string };
   coverage: { total: number; collected: number; missing: number; missingRequired: number };
   questions: { code?: string; text?: string; required: boolean; status: string; statusLabel: string; answer: string; reason?: string }[];
+  visitKind: { kind: 'effective' | 'general'; label: string; generalNotes: string[] };
+  categories: { key: string; title: string; items: { text: string; aspect?: string; status: string; statusLabel: string; infoTime?: string; target?: string }[] }[];
+  profileUpdates: { field: string; label: string; value: string; status: string; adopted: boolean }[];
   summary: Record<string, string>;
   outOfScope: { todos: { content: string; due?: string; owner?: string }[]; reminders: string[]; avoid: string[]; opportunities: string[]; others: string[] };
   attachments: { name: string; kind: string }[];
@@ -74,10 +86,17 @@ export function buildVisitReport(s: AppState, v: Visit): VisitReport {
       code: c?.code,
       name: c?.name,
       taxId: c?.taxId,
-      address: c?.address,
+      address: addressOf(c) || undefined,
       website: c?.website,
       category: c?.category,
       owner: userById(s, c?.ownerId)?.name,
+      principal: c?.principal,
+      phone: c?.phone,
+      customerTypes: c?.customerTypes || [],
+      products: c?.products || [],
+      markets: c?.markets || [],
+      machines: machinesText(c) || undefined,
+      automation: c?.automation ? [c.automation.level, (c.automation.processes || []).join('、')].filter(Boolean).join(':') : undefined,
       industries: industriesOf(c),
       contacts: (c?.contacts || []).map(({ id: _id, ...rest }) => rest),
     },
@@ -98,6 +117,13 @@ export function buildVisitReport(s: AppState, v: Visit): VisitReport {
       const q = questionById(s, x.questionId);
       return { code: q?.code, text: q?.text, required: x.required, status: x.status, statusLabel: STATUS[x.status] || x.status, answer: x.answer, reason: x.reason };
     }),
+    visitKind: { kind: visitKindOf(v), label: visitKindOf(v) === 'effective' ? '有效拜訪' : '一般拜訪', generalNotes: a?.generalNotes || [] },
+    categories: CATEGORIES.map((c) => ({
+      key: c.key,
+      title: c.title,
+      items: (categoriesOf(v)[c.key] || []).map((x) => ({ text: x.text, aspect: x.aspect, status: x.status, statusLabel: INFO_STATUS_LABEL[x.status], infoTime: x.infoTime, target: x.target ? TARGET_LABEL[x.target] : undefined })),
+    })),
+    profileUpdates: (a?.profileUpdates || []).map((u) => ({ field: u.field, label: FIELD_LABEL[u.field], value: u.value, status: INFO_STATUS_LABEL[u.status], adopted: isAcceptedUpdate(u) })),
     summary: a ? { 摘要: a.summary.keyPoints.text, 需求: a.summary.needs.text, 競品: a.summary.competitors.text, 異議: a.summary.objections.text, 下一步: a.summary.nextSteps.text } : {},
     outOfScope: {
       todos: todos.map((t) => ({ content: t.content, due: t.due, owner: userById(s, t.ownerId)?.name })),
@@ -121,9 +147,15 @@ export function reportToText(r: VisitReport): string {
   L.push('1-1 公司基本資料');
   kv('公司名稱', r.customer.name);
   kv('統編', r.customer.taxId);
+  kv('公司負責人', r.customer.principal);
+  kv('公司電話', r.customer.phone);
   kv('地址', r.customer.address);
-  kv('網站', r.customer.website);
-  kv('客戶分類', r.customer.category);
+  kv('網址', r.customer.website);
+  kv('客戶狀態', r.customer.category);
+  kv('客戶類型', r.customer.customerTypes.join('、'));
+  kv('射出產品', r.customer.products.join('、'));
+  kv('射出機', r.customer.machines);
+  kv('產線自動化', r.customer.automation);
   kv('負責業務', r.customer.owner);
   L.push('');
   L.push('1-2 聯絡人資料');
@@ -145,20 +177,24 @@ export function reportToText(r: VisitReport): string {
   L.push(`問題蒐集狀況:已蒐集 ${r.coverage.collected} / ${r.coverage.total},未蒐集 ${r.coverage.missing}(必答 ${r.coverage.missingRequired})`);
   r.questions.forEach((q) => L.push(`  ${q.status === 'uncovered' ? '✗' : '✓'} ${q.code} ${q.text}${q.required ? '[必答]' : ''}:${q.answer || q.statusLabel}${q.reason ? `(${q.reason})` : ''}`));
   L.push('');
-  L.push('重點摘要');
-  Object.entries(r.summary).forEach(([k, val]) => L.push(`  ${k}:${val}`));
+  L.push(`拜訪類別:${r.visitKind.label}${r.visitKind.generalNotes.length ? `(${r.visitKind.generalNotes.join('、')})` : ''}`);
   L.push('');
-  L.push('題庫之外的內容');
-  const sec = (title: string, items: string[]) => {
-    L.push(`  ◆ ${title}`);
-    if (!items.length) L.push('    (無)');
-    items.forEach((x) => L.push(`    ・${x}`));
-  };
-  sec(INSIGHT_LABEL.todo, r.outOfScope.todos.map((t) => `${t.content}${t.due ? `(${fmtDate(t.due)})` : ''}${t.owner ? `/${t.owner}` : ''}`));
-  sec(INSIGHT_LABEL.reminder, r.outOfScope.reminders);
-  sec(INSIGHT_LABEL.avoid, r.outOfScope.avoid);
-  sec(INSIGHT_LABEL.opportunity, r.outOfScope.opportunities);
-  sec(INSIGHT_LABEL.other, r.outOfScope.others);
+  L.push('拜訪摘要|七大資訊分類');
+  r.categories.forEach((c, i) => {
+    L.push(`  ${String(i + 1).padStart(2, '0')} ${c.title}`);
+    if (!c.items.length) L.push('    (未提及)');
+    c.items.forEach((x) => L.push(`    ・${x.text}${[x.aspect, x.statusLabel !== '明確表示' ? x.statusLabel : '', x.infoTime].filter(Boolean).length ? `〔${[x.aspect, x.statusLabel !== '明確表示' ? x.statusLabel : '', x.infoTime].filter(Boolean).join('/')}〕` : ''}`));
+  });
+  if (r.outOfScope.todos.length) {
+    L.push('');
+    L.push('待辦事項');
+    r.outOfScope.todos.forEach((t) => L.push(`  ・${t.content}${t.due ? `(${fmtDate(t.due)})` : ''}${t.owner ? `/${t.owner}` : ''}`));
+  }
+  if (r.profileUpdates.length) {
+    L.push('');
+    L.push('客戶資料更新');
+    r.profileUpdates.forEach((u) => L.push(`  ${u.adopted ? '✓' : '✗'} ${u.label}:${u.value}${u.adopted ? '' : '(未採用)'}`));
+  }
   if (r.attachments.length || r.supplements.length) {
     L.push('');
     L.push('附件與補充');
@@ -183,7 +219,7 @@ export function suggestFollowups(s: AppState, v: Visit): { questionId?: string; 
     .filter((x) => x.status === 'uncovered' || x.status === 'partial')
     .forEach((x) => {
       const q = questionById(s, x.questionId);
-      if (q) out.push({ questionId: q.id, text: q.text, required: x.required, why: x.status === 'uncovered' ? '上次未蒐集' : '上次只部分回覆' });
+      if (q) out.push({ questionId: q.id, text: q.text, required: x.required, why: x.status === 'uncovered' ? '上次未蒐集' : `上次部分取得${x.missing ? `,尚缺${x.missing}` : ''}` });
     });
   const clip = (t: string) => t.replace(/[。.]$/, '').slice(0, 24);
   if (a.summary.objections.text !== '未知') out.push({ text: `上次提到「${clip(a.summary.objections.text)}」,目前是否有解決方向?`, required: true, why: '異議追蹤' });

@@ -2,8 +2,10 @@ import React, { useMemo, useState } from 'react';
 import { View } from 'react-native';
 import { router } from 'expo-router';
 import { Screen } from '../../components/Screen';
-import { Chip, EmptyState, IconButton, ListRow, Row, SearchField, Segmented, Txt } from '../../components/ui';
+import { Button, Chip, EmptyState, IconButton, ListRow, Row, SearchField, Segmented, Txt } from '../../components/ui';
 import { QuickAddCustomer } from '../../components/Pickers';
+import { BusinessCardFlow } from '../../components/BusinessCard';
+import { Sheet } from '../../components/Sheet';
 import { C, SP, T } from '../../theme';
 import { useAppState, useOnline } from '../../store/store';
 import { avoidItems, currentUser, customerVisitType, lastConfirmedVisit } from '../../store/selectors';
@@ -17,6 +19,8 @@ export default function Customers() {
   const [q, setQ] = useState('');
   const [mode, setMode] = useState<'mine' | 'recent'>('mine');
   const [adding, setAdding] = useState(false);
+  const [menu, setMenu] = useState(false);
+  const [card, setCard] = useState(false);
 
   const list = useMemo(() => {
     const mine = s.customers.filter((c) => c.ownerId === me?.id);
@@ -34,7 +38,7 @@ export default function Customers() {
         <Txt size={T.h1} weight="700">
           客戶
         </Txt>
-        <IconButton name="plus" label="快速新增客戶" color={C.teal} onPress={() => setAdding(true)} />
+        <IconButton name="plus" label="新增客戶" color={C.teal} onPress={() => setMenu(true)} />
       </Row>
       <SearchField value={q} onChangeText={setQ} placeholder="搜尋公司名稱或聯絡人" style={{ marginBottom: SP.md }} />
       <Segmented
@@ -73,6 +77,37 @@ export default function Customers() {
       <Txt size={T.tiny + 1} color={C.text3} center style={{ marginTop: SP.lg }}>
         {online ? `資料更新時間:${fmtDateTime(s.lastSyncAt)}` : `目前離線,顯示手機中的資料(更新時間 ${fmtDateTime(s.lastSyncAt)})`}
       </Txt>
+
+      <Sheet
+        visible={menu}
+        onClose={() => setMenu(false)}
+        title="新增客戶"
+        footer={
+          <>
+            <Button
+              title="拍名片建立(建議)"
+              icon="photo"
+              onPress={() => {
+                setMenu(false);
+                setCard(true);
+              }}
+            />
+            <Button
+              title="手動輸入公司名稱"
+              variant="secondary"
+              onPress={() => {
+                setMenu(false);
+                setAdding(true);
+              }}
+            />
+          </>
+        }
+      >
+        <Txt size={T.small} color={C.text2}>
+          拍名片會自動帶入公司與聯絡人資料;也可以只輸入公司名稱,之後再補。
+        </Txt>
+      </Sheet>
+      <BusinessCardFlow visible={card} onClose={() => setCard(false)} onDone={(c) => router.push(`/customer/${c.id}`)} />
 
       <QuickAddCustomer
         visible={adding}

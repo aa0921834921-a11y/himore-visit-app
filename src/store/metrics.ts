@@ -1,5 +1,5 @@
 import type { AppState, Visit } from '../types';
-import { isAnswered, isHandled, salesUsers } from './selectors';
+import { isAnswered, isHandled, salesUsers, visitKindOf } from './selectors';
 
 // 後台指標(POC 範圍文件第 4、8 節):回答覆蓋率與流程已處理率分開看;每位業務的拜訪數、確認率、平均確認時間
 
@@ -63,4 +63,15 @@ export function prefStats(s: AppState, visits: Visit[]) {
   );
   const briefingViews = s.audit.filter((a) => a.type === 'briefing_view').length;
   return { suggested, accepted, briefingViews };
+}
+
+/** 拜訪成效:每位業務的有效拜訪與一般拜訪(未遇窗口、無暇訪談等)筆數;只計已入庫 */
+export function perSalesKind(s: AppState, visits: Visit[]) {
+  return salesUsers(s).map((u) => {
+    const mine = visits.filter((v) => v.salesId === u.id && v.status === 'confirmed');
+    const general = mine.filter((v) => visitKindOf(v) === 'general');
+    const reasons = new Map<string, number>();
+    general.forEach((v) => (v.ai?.generalNotes?.length ? v.ai.generalNotes : ['其他接洽情況']).forEach((n) => reasons.set(n, (reasons.get(n) || 0) + 1)));
+    return { user: u, total: mine.length, effective: mine.length - general.length, general: general.length, reasons, visits: mine };
+  });
 }

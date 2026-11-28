@@ -18,6 +18,7 @@ export default function AdminQuestions() {
   const [editQ, setEditQ] = useState<Question | 'new' | null>(null);
   const [qText, setQText] = useState('');
   const [qCat, setQCat] = useState('');
+  const [qHint, setQHint] = useState('');
   const [setId, setSetId] = useState(s.questionSets[0]?.id);
   const [adding, setAdding] = useState(false);
 
@@ -29,6 +30,7 @@ export default function AdminQuestions() {
     setEditQ(q);
     setQText(q === 'new' ? '' : q.text);
     setQCat(q === 'new' ? (cat === '全部分類' ? '' : cat) : q.category);
+    setQHint(q === 'new' ? '' : q.hint || '');
   };
 
   const bank = (
@@ -46,6 +48,7 @@ export default function AdminQuestions() {
             </Txt>
             <Txt size={T.small} color={C.text2}>
               分類:{q.category}
+              {q.hint ? `|希望帶回:${q.hint}` : ''}
               {q.active ? '' : '・已停用'}
             </Txt>
           </Pressable>
@@ -197,13 +200,14 @@ export default function AdminQuestions() {
             title="儲存"
             disabled={!qText.trim()}
             onPress={() => {
-              upsertQuestion(editQ === 'new' ? { text: qText.trim(), category: qCat.trim() || '其他' } : { ...(editQ as Question), text: qText.trim(), category: qCat.trim() || '其他' });
+              upsertQuestion(editQ === 'new' ? { text: qText.trim(), hint: qHint.trim() || undefined, category: qCat.trim() || '其他' } : { ...(editQ as Question), text: qText.trim(), hint: qHint.trim() || undefined, category: qCat.trim() || '其他' });
               setEditQ(null);
             }}
           />
         }
       >
         <Field label="題目" value={qText} onChangeText={setQText} placeholder="例:目前使用的射出機噸數與台數?" multiline />
+        <Field label="希望帶回的資訊" value={qHint} onChangeText={setQHint} placeholder="例:射出機廠牌/噸數/數量,以及周邊、自動化現況" hint="AI 依此判斷「已取得」或「部分取得,還缺什麼」;業務在題目下方也看得到" multiline />
         <Field label="分類(一層)" value={qCat} onChangeText={setQCat} placeholder="例:設備現況" />
         <Row style={{ flexWrap: 'wrap' }}>
           {cats.filter((c) => c !== '全部分類').map((c) => (

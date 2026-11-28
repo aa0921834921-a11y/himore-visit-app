@@ -3,7 +3,9 @@ import * as Clipboard from 'expo-clipboard';
 import * as Sharing from 'expo-sharing';
 import { File, Paths } from 'expo-file-system';
 import type { AppState, Visit } from '../types';
-import { customerById, industriesOf, purposeOf, questionById, userById } from '../store/selectors';
+import { categoriesOf, customerById, industriesOf, purposeOf, questionById, userById, visitKindOf } from '../store/selectors';
+import { CATEGORIES, FIELD_LABEL } from '../store/options';
+import { isAcceptedUpdate } from '../store/actions';
 import { fmtDate, fmtDateTime, toCsv } from '../lib/util';
 
 const STATUS_LABEL: Record<string, string> = {
@@ -66,7 +68,7 @@ export async function copyText(text: string) {
 
 /** B4 下載 CSV:欄位依文案表 T-B4-14;「限定」敏感度的偏好與避免事項預設不匯出 */
 export function buildVisitsCsv(s: AppState, visits: Visit[], includeRestricted = false): string {
-  const header = ['拜訪編號', '客戶編號', '客戶名稱', '統編', '客戶分類', '產業別', '拜訪日期', '拜訪人員', '拜訪類型', '目的', '需求', '追蹤事項', '輸入來源', '狀態', '題目與回覆', '摘要', '偏好與避免事項', '補充內容', '附件', '確認時間'];
+  const header = ['拜訪編號', '客戶編號', '客戶名稱', '統編', '客戶狀態', '所屬產業', '拜訪日期', '拜訪人員', '拜訪類型', '拜訪類別', '一般拜訪資訊', '目的', '需求', '追蹤事項', '輸入來源', '狀態', '題目與回覆', ...CATEGORIES.map((c) => c.title), '客戶資料更新', '偏好與避免事項', '補充內容', '附件', '確認時間'];
   const srcLabel = { recording: '現場錄音', dictation: '業務口述', text: '文字輸入' } as const;
   const rows = visits.map((v) => {
     const c = customerById(s, v.customerId);
@@ -78,7 +80,6 @@ export function buildVisitsCsv(s: AppState, visits: Visit[], includeRestricted =
         return `${q?.code || ''} ${q?.text || ''}:${x.answer || answerStatusLabel(x.status)}${x.reason ? `(${x.reason})` : ''}`;
       })
       .join(' / ');
-    const summary = a ? `重點:${a.summary.keyPoints.text} 需求:${a.summary.needs.text} 競品:${a.summary.competitors.text} 異議:${a.summary.objections.text} 下一步:${a.summary.nextSteps.text}` : '';
     const todos = s.todos.filter((t) => t.visitId === v.id).map((t) => `${t.content}${t.due ? `(${t.due})` : ''}`).join(' / ');
     const prefs = s.preferences
       .filter((p) => p.sourceVisitId === v.id && (includeRestricted || p.sensitivity === 'normal'))
@@ -88,7 +89,11 @@ export function buildVisitsCsv(s: AppState, visits: Visit[], includeRestricted =
     const atts = (v.raw.attachments || []).map((x) => x.name).join(' / ');
     const needs = a && a.summary.needs.text !== '未知' ? a.summary.needs.text : '';
     const follow = todos || (a && a.summary.nextSteps.text !== '未知' ? a.summary.nextSteps.text : '');
-    return [v.code, c?.code, c?.name, c?.taxId, c?.category, industriesOf(c).join('、'), fmtDate(v.visitAt), u?.name, v.visitType, purposeOf(v, s), needs, follow, srcLabel[v.source], VISIT_STATUS_LABEL[v.status], qa, summary, prefs, sups, atts, v.confirmedAt ? fmtDateTime(v.confirmedAt) : ''];
+    const cats = categoriesOf(v);
+    const catCols = CATEGORIES.map((ct) => (cats[ct.key] || []).map((x) => `${x.text}${x.status !== 'explicit' ? `(${x.status === 'possible' ? '可能' : '待確認'})` : ''}`).join(' / '));
+    const kind = a ? (visitKindOf(v) === 'effective' ? '有效拜訪' : '一般拜訪') : '';
+    const updates = (a?.profileUpdates || []).filter(isAcceptedUpdate).map((x) => `${FIELD_LABEL[x.field]}:${x.value}`).join(' / ');
+    return [v.code, c?.code, c?.name, c?.taxId, c?.category, industriesOf(c).join('、'), fmtDate(v.visitAt), u?.name, v.visitType, kind, (a?.generalNotes || []).join('、'), purposeOf(v, s), needs, follow, srcLabel[v.source], VISIT_STATUS_LABEL[v.status], qa, ...catCols, updates, prefs, sups, atts, v.confirmedAt ? fmtDateTime(v.confirmedAt) : ''];
   });
   return toCsv([header, ...rows]);
 }

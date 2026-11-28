@@ -9,14 +9,21 @@ import {
   suggestCustomer,
 } from "./mock";
 import type {
+  CategoryItem,
+  CategoryKey,
+  Customer,
+  InfoStatus,
+  ProfileField,
+  ProfileUpdate,
+  UpdateTarget,
+  VisitKind,
   AnalysisResult,
   Attachment,
-  InsightKind,
   PrefSuggestion,
   Segment,
-  SummaryKey,
 } from "../../types";
 import type { AiService, AnalyzeInput, TranscribeInput } from "./types";
+import { GENERAL_NOTES, machinesText } from "../../store/options";
 
 // 本機 AI 伺服器(local-ai-server/server.py):
 //   語音轉文字 Breeze ASR、照片/檔案抽字、Ollama 開源語言模型分析。
@@ -246,26 +253,58 @@ async function extractAttachment(
   return (r.text || "").trim();
 }
 
+interface RawItem {
+  text: string;
+  aspect?: string;
+  status?: string;
+  info_time?: string;
+  target?: string;
+  mentioned_by?: string;
+  segment_ids: string[];
+}
 interface RawResult {
+  visit_kind?: string;
+  general_notes?: string[];
   purpose?: string;
-  answers?: {
-    question_id: string;
-    status: string;
-    answer: string;
+  answers?: { question_id: string; status: string; answer: string; missing?: string; segment_ids: string[] }[];
+  categories?: Partial<Record<CategoryKey, RawItem[]>>;
+  profile_updates?: {
+    field: string;
+    value: string;
+    brand?: string;
+    tonnage?: string;
+    qty?: number;
+    contact_name?: string;
+    contact_title?: string;
+    contact_department?: string;
+    contact_phone?: string;
+    contact_email?: string;
+    contact_role?: string;
+    status?: string;
     segment_ids: string[];
   }[];
-  summary?: Partial<
-    Record<SummaryKey, { text: string; segment_ids: string[] }>
-  >;
   todos?: { content: string; due: string; segment_ids: string[] }[];
-  prefs?: {
-    type: string;
-    target: string;
-    target_name: string;
-    content: string;
-    segment_ids: string[];
-  }[];
-  insights?: { kind: string; text: string; segment_ids: string[] }[];
+  prefs?: { type: string; target: string; target_name: string; content: string; segment_ids: string[] }[];
+}
+
+const CAT_KEYS: CategoryKey[] = ['c1', 'c2', 'c3', 'c4', 'c5', 'c6', 'c7'];
+const FIELDS = ['principal', 'phone', 'address', 'website', 'customerTypes', 'industries', 'products', 'markets', 'employeeScale', 'machine', 'automationLevel', 'automationProcess', 'contact'];
+const statusOf = (x?: string): InfoStatus => (x === 'possible' || x === 'pending' ? x : 'explicit');
+
+/** 給模型參考的客戶檔案現況(避免重複建議) */
+function profileText(c?: Customer): string {
+  if (!c) return '';
+  const parts = [
+    c.machines?.length ? `射出機:${machinesText(c)}` : '',
+    c.products?.length ? `射出產品:${c.products.join('、')}` : '',
+    c.automation?.processes?.length ? `已自動化製程:${c.automation.processes.join('、')}` : '',
+    c.automation?.level ? `自動化程度:${c.automation.level}` : '',
+    c.contacts.length ? `聯絡人:${c.contacts.map((x) => x.name).join('、')}` : '',
+    c.principal ? `負責人:${c.principal}` : '',
+    c.phone ? `電話:${c.phone}` : '',
+    c.employeeScale ? `員工規模:${c.employeeScale}` : '',
+  ];
+  return parts.filter(Boolean).join(';');
 }
 
 const SRC_LABEL = {
@@ -436,8 +475,11 @@ export function createRemoteAi(): AiService {
             id: it.questionId,
             code: qOf(it.questionId)?.code || "",
             text: qOf(it.questionId)?.text || "",
+            hint: qOf(it.questionId)?.hint || "",
             required: it.required,
+            tracked: !!it.tracked,
           })),
+          profile: profileText(input.customer),
           customer_name: input.customer?.name || null,
           contacts: (input.customer?.contacts || []).map((c) =>
             [c.name, c.title].filter(Boolean).join(" "),
@@ -454,14 +496,28 @@ export function createRemoteAi(): AiService {
         input.customers.find(
           (c) => c.id === suggestCustomer(sents, input.customers),
         );
-      const sum = (k: SummaryKey) => {
-        const f = raw.summary?.[k];
-        const text = (f?.text || "").trim();
-        return {
-          text: text && text !== "無" ? text : "未知",
-          sourceSegmentIds: text && text !== "未知" ? ids(f?.segment_ids) : [],
-        };
+      // 七大分類
+      const categories: Partial<Record<CategoryKey, CategoryItem[]>> = {};
+      CAT_KEYS.forEach((k) => {
+        const list = (raw.categories?.[k] || []).filter((x) => x.text?.trim()).slice(0, 4);
+        if (list.length)
+          categories[k] = list.map((x) => ({
+            id: uid('ci'),
+            text: x.text.trim(),
+            aspect: x.aspect?.trim() || undefined,
+            status: statusOf(x.status),
+            infoTime: x.info_time?.trim() || undefined,
+            target: (['company', 'factory', 'contact', 'preference'].includes(x.target || '') ? x.target : undefined) as UpdateTarget | undefined,
+            mentionedBy: x.mentioned_by?.trim() || undefined,
+            sourceSegmentIds: ids(x.segment_ids),
+          }));
+      });
+      // 舊版五欄摘要由七大分類產生(報告與匯出相容)
+      const sum = (k: CategoryKey) => {
+        const list = categories[k] || [];
+        return list.length ? { text: list.map((x) => x.text).join(';'), sourceSegmentIds: Array.from(new Set(list.flatMap((x) => x.sourceSegmentIds))) } : { text: '未知', sourceSegmentIds: [] };
       };
+      const visitKind: VisitKind = raw.visit_kind === 'general' ? 'general' : 'effective';
       const firstSeg = (xs?: string[]) =>
         real.get(String((xs || [])[0] || "").trim());
 
@@ -479,18 +535,35 @@ export function createRemoteAi(): AiService {
           return {
             questionId: it.questionId,
             required: it.required,
+            tracked: it.tracked,
             status,
             answer: status === "uncovered" ? "" : (a?.answer || "").trim(),
+            missing: status === "partial" ? a?.missing?.trim() || undefined : undefined,
             sourceSegmentIds: status === "uncovered" ? [] : ids(a?.segment_ids),
           };
         }),
-        summary: {
-          keyPoints: sum("keyPoints"),
-          needs: sum("needs"),
-          competitors: sum("competitors"),
-          objections: sum("objections"),
-          nextSteps: sum("nextSteps"),
-        },
+        summary: { keyPoints: sum('c1'), needs: sum('c2'), competitors: sum('c5'), objections: sum('c6'), nextSteps: sum('c7') },
+        categories,
+        visitKind,
+        generalNotes: visitKind === 'general' ? (raw.general_notes || []).filter((x) => GENERAL_NOTES.includes(x)) : [],
+        profileUpdates: (raw.profile_updates || [])
+          .filter((u) => FIELDS.includes(u.field) && (u.value?.trim() || u.contact_name))
+          .slice(0, 12)
+          .map(
+            (u): ProfileUpdate => ({
+              id: uid('pu'),
+              field: u.field as ProfileField,
+              value: (u.value || u.contact_name || '').trim(),
+              machine: u.field === 'machine' ? { brand: u.brand || undefined, tonnage: (u.tonnage || '').replace(/[^\d.]/g, '') || undefined, qty: u.qty || undefined } : undefined,
+              contact:
+                u.field === 'contact' && u.contact_name
+                  ? { name: u.contact_name, title: u.contact_title || undefined, department: u.contact_department || undefined, phone: u.contact_phone || undefined, email: u.contact_email || undefined, role: u.contact_role || undefined }
+                  : undefined,
+              status: statusOf(u.status),
+              sourceSegmentIds: ids(u.segment_ids),
+              decision: 'pending',
+            }),
+          ),
         facts: extractFacts(sents),
         uncertainties: extractUncertainties(sents, input.segments),
         prefs: (raw.prefs || [])
@@ -520,22 +593,35 @@ export function createRemoteAi(): AiService {
             due: /^\d{4}-\d{2}-\d{2}$/.test(t.due || "") ? t.due : undefined,
             keep: true,
           })),
-        insights: (raw.insights || [])
-          .filter((x) => x.text?.trim())
-          .slice(0, 10)
-          .map((x) => ({
-            id: uid("in"),
-            kind: (["reminder", "avoid", "opportunity", "other"].includes(
-              x.kind,
-            )
-              ? x.kind
-              : "other") as InsightKind,
-            text: x.text.trim(),
-            sourceSegmentId: firstSeg(x.segment_ids)?.id,
-          })),
+        insights: [],
         purpose: raw.purpose?.trim() || undefined,
         generatedAt: new Date().toISOString(),
       };
     },
   };
+}
+
+export interface CardResult {
+  company_name?: string;
+  tax_id?: string;
+  company_phone?: string;
+  fax?: string;
+  city?: string;
+  district?: string;
+  street?: string;
+  website?: string;
+  contact_name?: string;
+  title?: string;
+  department?: string;
+  mobile?: string;
+  email?: string;
+  raw_text?: string;
+}
+
+/** 名片辨識(本機 AI 伺服器的視覺模型) */
+export async function remoteReadCard(uri: string, name: string, mime: string, onProgress?: (m: string) => void): Promise<CardResult> {
+  const cfg = serverConfig();
+  if (!cfg) throw new Error('尚未設定 AI 伺服器');
+  const fd = await fileForm(uri, name, mime);
+  return runJob<CardResult>(cfg, '/jobs/card', fd, onProgress);
 }

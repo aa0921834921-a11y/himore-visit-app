@@ -21,8 +21,8 @@ import { useAppState } from "../../store/store";
 import {
   customerById,
   questionById,
-  setById,
   visitById,
+  visitQuestionItems,
 } from "../../store/selectors";
 import { discardDraft, patchRaw } from "../../store/actions";
 import { useRecorder } from "../../services/recorder";
@@ -34,8 +34,8 @@ export default function Dictate() {
   const { visitId } = useLocalSearchParams<{ visitId: string }>();
   const s = useAppState();
   const v = visitById(s, visitId);
-  const set = setById(s, v?.questionSetId);
-  const items = set?.items || [];
+  // 題組 + 前次未取得/部分取得的追蹤題
+  const items = visitQuestionItems(s, v);
   const rec = useRecorder();
   const [mode, setMode] = useState<"guided" | "free">(
     items.length ? "guided" : "free",

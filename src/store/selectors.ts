@@ -1,4 +1,4 @@
-import type { AnswerItem, AppState, Customer, Question, QuestionSet, Schedule, Todo, User, Visit, VisitType } from '../types';
+import type { AnswerItem, AppState, CategoryItem, CategoryKey, Customer, Question, QuestionSet, QuestionSetItem, Schedule, Todo, User, Visit, VisitKind, VisitType } from '../types';
 import { ymd } from '../lib/util';
 
 export const currentUser = (s: AppState): User | undefined => s.users.find((u) => u.id === s.sessionUserId);
@@ -126,4 +126,84 @@ export function purposeOf(v?: Visit, s?: AppState): string | undefined {
   if (!s) return undefined;
   const a = v.ai?.answers.find((x) => x.answer && questionById(s, x.questionId)?.text.includes('目的'));
   return a?.answer;
+}
+
+// ---------- 七大分類(舊資料由五欄摘要轉換) ----------
+
+const LEGACY_MAP: [CategoryKey, 'keyPoints' | 'needs' | 'competitors' | 'objections' | 'nextSteps'][] = [
+  ['c1', 'keyPoints'],
+  ['c2', 'needs'],
+  ['c5', 'competitors'],
+  ['c6', 'objections'],
+  ['c7', 'nextSteps'],
+];
+
+export function categoriesOf(v?: Visit): Partial<Record<CategoryKey, CategoryItem[]>> {
+  const a = v?.ai;
+  if (!a) return {};
+  if (a.categories) return a.categories;
+  const out: Partial<Record<CategoryKey, CategoryItem[]>> = {};
+  LEGACY_MAP.forEach(([k, f]) => {
+    const t = a.summary[f]?.text;
+    if (t && t !== '未知') out[k] = [{ id: `${k}_legacy`, text: t, status: 'explicit', sourceSegmentIds: a.summary[f].sourceSegmentIds }];
+  });
+  return out;
+}
+
+export function visitKindOf(v?: Visit): VisitKind {
+  return v?.ai?.visitKind || 'effective';
+}
+
+// ---------- 題目自動追蹤 ----------
+
+export interface TrackedQuestion {
+  questionId: string;
+  status: 'collected' | 'partial' | 'missing' | 'paused';
+  answer?: string;
+  missing?: string;
+  reason?: string;
+  visitId: string;
+  at: string;
+}
+
+/** 客戶的題目追蹤狀態(依已入庫拜訪,由舊到新;已取得不再追蹤,客戶拒答或不適用暫停追蹤) */
+export function questionTracking(s: AppState, customerId?: string, excludeVisitId?: string): Record<string, TrackedQuestion> {
+  const out: Record<string, TrackedQuestion> = {};
+  if (!customerId) return out;
+  s.visits
+    .filter((v) => v.customerId === customerId && v.status === 'confirmed' && v.id !== excludeVisitId && v.ai)
+    .sort((a, b) => a.visitAt.localeCompare(b.visitAt))
+    .forEach((v) => {
+      v.ai!.answers.forEach((a) => {
+        const prev = out[a.questionId];
+        const base = { questionId: a.questionId, visitId: v.id, at: v.visitAt };
+        if (a.status === 'answered') out[a.questionId] = { ...base, status: 'collected', answer: a.answer };
+        else if (a.status === 'not_provided' || a.status === 'na') out[a.questionId] = { ...base, status: 'paused', reason: a.reason };
+        else if (prev?.status === 'collected' || prev?.status === 'paused') return;
+        else if (a.status === 'partial') out[a.questionId] = { ...base, status: 'partial', answer: a.answer, missing: a.missing };
+        else if (a.status === 'uncovered' && prev?.status !== 'partial') out[a.questionId] = { ...base, status: 'missing' };
+      });
+    });
+  return out;
+}
+
+/** 需要在下次拜訪補問的題目 */
+export function pendingFollowups(s: AppState, customerId?: string, excludeVisitId?: string): (TrackedQuestion & { question?: Question })[] {
+  return Object.values(questionTracking(s, customerId, excludeVisitId))
+    .filter((t) => t.status === 'partial' || t.status === 'missing')
+    .map((t) => ({ ...t, question: questionById(s, t.questionId) }))
+    .filter((t) => t.question?.active !== false)
+    .sort((a, b) => (a.question?.code || '').localeCompare(b.question?.code || '', undefined, { numeric: true }));
+}
+
+/** 這次拜訪要問的題目:題組 + 自動帶入的追蹤題 */
+export function visitQuestionItems(s: AppState, v?: Visit): QuestionSetItem[] {
+  if (!v) return [];
+  const set = setById(s, v.questionSetId);
+  const items: QuestionSetItem[] = [...(set?.items || [])];
+  const have = new Set(items.map((i) => i.questionId));
+  pendingFollowups(s, v.customerId, v.id).forEach((t) => {
+    if (!have.has(t.questionId)) items.push({ questionId: t.questionId, required: false, tracked: true });
+  });
+  return items;
 }

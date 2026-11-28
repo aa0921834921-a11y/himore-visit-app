@@ -3,7 +3,8 @@ import { View } from 'react-native';
 import { router, useLocalSearchParams } from 'expo-router';
 import { PageTitle, Panel, useWide } from '../../../components/admin';
 import { Button, Chip, Field, KeyValue, Notice, Row, Txt } from '../../../components/ui';
-import { CoverageList, OutOfScope } from '../../../components/Report';
+import { CoverageList } from '../../../components/Report';
+import { CategoryList, ProfileUpdatesCard, VisitKindCard } from '../../../components/VisitInsights';
 import { AttachmentList } from '../../../components/Attachments';
 import { C, SP, T } from '../../../theme';
 import { showToast, useAppState } from '../../../store/store';
@@ -32,24 +33,36 @@ export default function AdminReview() {
       <Panel title="一、問題蒐集狀況">
         <CoverageList r={r} />
       </Panel>
-      <Panel title="二、重點摘要">
-        {Object.entries(r.summary).map(([k, val]) => (
-          <View key={k} style={{ marginBottom: SP.sm }}>
-            <Txt size={T.small} weight="700" color={C.teal}>
-              {k}
-            </Txt>
-            <Txt color={val === '未知' ? C.text3 : C.text}>{val}</Txt>
-          </View>
-        ))}
-        {!Object.keys(r.summary).length ? <Txt color={C.text3}>尚未整理完成。</Txt> : null}
+      <Panel title="二、拜訪摘要|七大資訊分類">
+        {v.ai ? (
+          <>
+            <VisitKindCard v={v} editable={false} />
+            <CategoryList v={v} editable={false} />
+          </>
+        ) : (
+          <Txt color={C.text3}>尚未整理完成。</Txt>
+        )}
       </Panel>
     </View>
   );
 
   const right = (
     <View style={wide ? { flex: 1 } : undefined}>
-      <Panel title="三、題庫之外的內容">
-        <OutOfScope r={r} />
+      <Panel title="三、客戶資料更新">
+        {v.ai?.profileUpdates?.length ? <ProfileUpdatesCard v={v} editable={false} /> : <Txt color={C.text3}>這次拜訪沒有需要更新的客戶資料。</Txt>}
+        {r.outOfScope.todos.length ? (
+          <>
+            <Txt size={T.small} weight="700" color={C.teal} style={{ marginTop: SP.sm }}>
+              待辦事項
+            </Txt>
+            {r.outOfScope.todos.map((t, i) => (
+              <Txt key={i} size={T.small} style={{ marginTop: 2 }}>
+                ・{t.content}
+                {t.due ? `(${t.due})` : ''}
+              </Txt>
+            ))}
+          </>
+        ) : null}
       </Panel>
       {v.raw.attachments?.length || v.raw.supplements?.length ? (
         <Panel title="四、附件與補充">
